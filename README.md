@@ -25,8 +25,8 @@ npx vite-dependency-classifier
 npx vite-dependency-classifier /path/to/project
 npx vite-dependency-classifier --config vite.config.prod.ts
 npx vite-dependency-classifier --json
-# @emotion/react: MUI peer, resolved at runtime, never in the bundle by name
-npx vite-dependency-classifier --runtime-peer @emotion/react
+# some-peer: required at runtime, never in the bundle by name
+npx vite-dependency-classifier --runtime-peer some-peer
 ```
 
 - `-h, --help` — print usage and exit
@@ -49,6 +49,31 @@ run the TypeScript source with Node's type stripper:
 
 ```bash
 node src/check.ts
+```
+
+## CI
+
+Add a script, then run it after install. The check does its own production
+build (nothing is written to disk), so it does not need a prior `npm run build`.
+
+```json
+"scripts": {
+  "check:deps": "vite-dependency-classifier"
+}
+```
+
+```yaml
+- run: npm run check:deps
+```
+
+Leave `-q` off so a green job still prints the chunk and package counts. Do
+not put `--runtime-peer` in the npm script: JSON cannot hold the required
+reason next to the flag. Put the command in a commentable file — a small
+`scripts/check-deps.sh`, or the CI step itself:
+
+```sh
+vite-dependency-classifier \
+  --runtime-peer some-peer  # required at runtime, never in the bundle by name
 ```
 
 ## Library
