@@ -132,6 +132,13 @@ phantoms needs a source-level import scan, which is a different check.
 "node": "^22.18.0 || ^24.3.0 || >=26.0.0"
 ```
 
+Vite 8 is `^20.19.0 || >=22.12.0`. This range is narrower on purpose: Node 20
+is dropped, and the 22 / 24 floors are the first minors where type stripping
+runs without `--experimental-strip-types` or an `ExperimentalWarning`. A clone
+needs that for `node src/check.ts`. The published CLI is compiled JavaScript
+and would run on Vite's wider range; the engines still follow the source-run
+path.
+
 `.npmrc` sets `engine-strict=true`, so `npm install` fails on an unsupported
 Node.
 
