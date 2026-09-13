@@ -1,45 +1,45 @@
 #!/usr/bin/env node
 /**
- * CLI. Run from a Vite project root; an optional path overrides cwd.
+ * CLI. Parse flags, run `check()`, print, exit.
  */
-import path from "node:path";
+import {
+  CLI_NAME,
+  formatCheckResult,
+  helpText,
+  packageVersion,
+  parseCli,
+} from "./cli.ts";
 import { check } from "./runCheck.ts";
 
-const result = await check({
-  root: path.resolve(process.argv[2] ?? process.cwd()),
-});
+const parsed = parseCli(process.argv.slice(2));
 
-console.log(
-  `Built ${String(result.chunkCount)} chunks; ${String(result.packages.size)} packages reached the production bundle.`,
-);
-
-if (result.missing.length > 0) {
-  console.error(
-    "\nDeclared in devDependencies, but present in the production bundle:",
-  );
-  for (const name of result.missing) console.error(`  ${name}`);
-  console.error(
-    "\nThese ship to users, so they belong in dependencies — or the import\n" +
-      "should be removed or guarded. A devDependency that ships is an exposure\n" +
-      "that `npm audit --omit=dev` will not show you.",
-  );
+if (parsed.kind === "help") {
+  console.log(helpText());
+  process.exit(0);
 }
 
-if (result.extra.length > 0) {
-  console.error(
-    "\nDeclared in dependencies, but absent from the production bundle:",
-  );
-  for (const name of result.extra) console.error(`  ${name}`);
-  console.error(
-    "\nMove them to devDependencies, or — if a dependency pulls them in at\n" +
-      "runtime without our source importing them by name — pass them as\n" +
-      "`runtimePeers` to `check()`, with the reason.",
-  );
+if (parsed.kind === "version") {
+  console.log(packageVersion());
+  process.exit(0);
 }
 
-if (!result.ok) {
-  console.error('\nSee README.md ("Dependencies") for the policy.');
+if (parsed.kind === "usage") {
+  console.error(parsed.message);
+  console.error(`Try '${CLI_NAME} --help' for more information.`);
+  process.exit(2);
+}
+
+try {
+  const result = await check(parsed.options);
+  const { stdout, stderr } = formatCheckResult(result, {
+    json: parsed.json,
+    quiet: parsed.quiet,
+  });
+  if (stdout !== "") console.log(stdout);
+  if (stderr !== "") console.error(stderr);
+  process.exit(result.ok ? 0 : 1);
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(message);
   process.exit(1);
 }
-
-console.log("Dependency classification is correct.");

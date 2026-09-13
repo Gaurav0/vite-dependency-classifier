@@ -23,13 +23,24 @@ From a Vite project root:
 ```bash
 npx vite-dependency-classifier
 npx vite-dependency-classifier /path/to/project
+npx vite-dependency-classifier --config vite.config.prod.ts
+npx vite-dependency-classifier --json
 ```
+
+- `-h, --help` — print usage and exit
+- `-v, --version` — print the package version and exit
+- `-c, --config <file>` — Vite config file (default: the names Vite searches)
+- `--input <file>` — entry module, for projects without a Vite config
+- `--runtime-peer <name>` — exempt a runtime peer from the extra check (repeatable)
+- `--json` — print the result as JSON
+- `-q, --quiet` — print only classification failures
 
 The command reads that project's `package.json` and Vite config (the same
 names Vite searches: `vite.config.js`, `.mjs`, `.ts`, `.cjs`, `.mts`,
 `.cts`), runs a production build (nothing is written to disk), and exits
 `1` if a declared `devDependency` reached the bundle or a declared
-`dependency` did not.
+`dependency` did not. A usage error (unknown flag, extra argument) exits
+`2`.
 
 The published CLI is compiled JavaScript (`dist/check.js`). A clone can still
 run the TypeScript source with Node's type stripper:
