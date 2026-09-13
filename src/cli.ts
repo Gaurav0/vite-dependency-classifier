@@ -47,7 +47,7 @@ Options:
   -c, --config <file>    Vite config file (default: vite.config.*)
   --input <file>         Entry module when no Vite config is used
   --runtime-peer <name>  Exempt a runtime peer from the extra check
-                         (repeatable)
+                         (repeatable). Put the reason next to the flag.
   --json                 Print the result as JSON
   -q, --quiet            Print only classification failures
   -h, --help             Show this help
@@ -172,8 +172,9 @@ export function formatCheckResult(
     for (const name of result.extra) stderr.push(`  ${name}`);
     stderr.push(
       "\nMove them to devDependencies, or — if a dependency pulls them in at\n" +
-        "runtime without our source importing them by name — pass them as\n" +
-        "`runtimePeers` to `check()`, with the reason.",
+        "runtime without our source importing them by name — pass\n" +
+        "`--runtime-peer <name>`. Put the reason next to the flag in the\n" +
+        "script or CI step that runs this command.",
     );
   }
 

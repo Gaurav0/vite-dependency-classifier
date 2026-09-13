@@ -2,7 +2,13 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { helpText, packageVersion, parseCli } from "../src/cli.ts";
+import {
+  formatCheckResult,
+  helpText,
+  packageVersion,
+  parseCli,
+} from "../src/cli.ts";
+import type { CheckResult } from "../src/runCheck.ts";
 
 const bin = fileURLToPath(new URL("../src/check.ts", import.meta.url));
 
@@ -116,5 +122,47 @@ describe("bin", () => {
     expect(result.stderr).toContain(
       "Try 'vite-dependency-classifier --help' for more information.",
     );
+  });
+
+  it("exempts a runtime peer passed as --runtime-peer", () => {
+    const root = fileURLToPath(
+      new URL("./fixtures/runtime-peer", import.meta.url),
+    );
+
+    const without = spawnCli(root, "--input", "src/main.ts");
+    expect(without.status).toBe(1);
+    expect(without.stderr).toContain("runtime-peer-pkg");
+    expect(without.stderr).toContain("--runtime-peer");
+
+    const withPeer = spawnCli(
+      root,
+      "--input",
+      "src/main.ts",
+      "--runtime-peer",
+      "runtime-peer-pkg",
+    );
+    expect(withPeer.status).toBe(0);
+    expect(withPeer.stdout).toContain("Dependency classification is correct.");
+  });
+});
+
+describe("formatCheckResult", () => {
+  const extraResult: CheckResult = {
+    ok: false,
+    missing: [],
+    extra: ["runtime-peer-pkg"],
+    packages: new Set(),
+    chunkCount: 1,
+  };
+
+  it("points extra failures at --runtime-peer, with the reason next to the flag", () => {
+    const { stderr } = formatCheckResult(extraResult, {
+      json: false,
+      quiet: false,
+    });
+    expect(stderr).toContain("runtime-peer-pkg");
+    expect(stderr).toContain("--runtime-peer");
+    expect(stderr).toMatch(/reason next to the flag/i);
+    expect(stderr).not.toContain("runtimePeers");
   });
 });

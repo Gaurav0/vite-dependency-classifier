@@ -25,13 +25,15 @@ npx vite-dependency-classifier
 npx vite-dependency-classifier /path/to/project
 npx vite-dependency-classifier --config vite.config.prod.ts
 npx vite-dependency-classifier --json
+# @emotion/react: MUI peer, resolved at runtime, never in the bundle by name
+npx vite-dependency-classifier --runtime-peer @emotion/react
 ```
 
 - `-h, --help` — print usage and exit
 - `-v, --version` — print the package version and exit
 - `-c, --config <file>` — Vite config file (default: the names Vite searches)
 - `--input <file>` — entry module, for projects without a Vite config
-- `--runtime-peer <name>` — exempt a runtime peer from the extra check (repeatable)
+- `--runtime-peer <name>` — exempt a runtime peer from the extra check (repeatable). Put the reason in a comment next to the flag in the script or CI step that passes it.
 - `--json` — print the result as JSON
 - `-q, --quiet` — print only classification failures
 
@@ -63,6 +65,9 @@ const { check } = require("vite-dependency-classifier");
 const { ok, missing, extra } = await check();
 ```
 
+Pass `runtimePeers` the same way the CLI takes `--runtime-peer`, with the
+reason on the line that adds each name.
+
 `collectBundledPackages` and `classifyPackages` are also exported for callers
 that want the halves separately.
 
@@ -90,7 +95,8 @@ dependencies pulled in at runtime by a dependency's own code still belong in
 `dependencies`. They often reach the bundle under their own names, in which
 case this check sees them without help. A package that is required at runtime
 and _never_ appears in the bundle under its own name needs an explicit
-`runtimePeers` exemption, with a stated reason.
+exemption — `--runtime-peer` on the CLI, or `runtimePeers` on `check()` —
+with a stated reason next to that flag or call.
 
 **A dev-only tool imported from a production source file must be behind an
 `import.meta.env.DEV` guard**, so the bundler removes it — rather than relying
