@@ -11,10 +11,11 @@ export interface CollectBundledPackagesOptions {
   /** Project root to build. */
   root: string;
   /**
-   * Vite config to build with. Pass a path, or `false` and supply `input`
-   * when there is no config (fixtures).
+   * Vite config to build with. Omitted: Vite searches its usual names.
+   * Pass a path, or `false` and supply `input` when there is no config
+   * (fixtures).
    */
-  configFile: string | false;
+  configFile?: string | false;
   /** Entry module, required when `configFile` is false (there is no index.html). */
   input?: string;
 }
@@ -83,7 +84,7 @@ async function collectOnce({
   try {
     await build({
       root,
-      configFile,
+      ...(configFile === undefined ? {} : { configFile }),
       mode: "production",
       logLevel: "silent",
       // file: deps (and most workspace links) are symlinks. Vite realpaths

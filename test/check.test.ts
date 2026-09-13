@@ -18,4 +18,15 @@ describe("check", () => {
     expect(result.extra).toEqual([]);
     expect(result.packages.has("fixture-lib")).toBe(true);
   });
+
+  it("discovers vite.config.js when configFile is omitted", async () => {
+    const result = await check({
+      root: fixture("config-js"),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.missing).toEqual([]);
+    expect(result.extra).toEqual([]);
+    expect(result.packages.has("fixture-lib")).toBe(true);
+  });
 });

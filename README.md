@@ -25,9 +25,11 @@ npx vite-dependency-classifier
 npx vite-dependency-classifier /path/to/project
 ```
 
-The command reads that project's `package.json` and `vite.config.ts`, runs a
-production build (nothing is written to disk), and exits `1` if a declared
-`devDependency` reached the bundle or a declared `dependency` did not.
+The command reads that project's `package.json` and Vite config (the same
+names Vite searches: `vite.config.js`, `.mjs`, `.ts`, `.cjs`, `.mts`,
+`.cts`), runs a production build (nothing is written to disk), and exits
+`1` if a declared `devDependency` reached the bundle or a declared
+`dependency` did not.
 
 The published CLI is compiled JavaScript (`dist/check.js`). A clone can still
 run the TypeScript source with Node's type stripper:

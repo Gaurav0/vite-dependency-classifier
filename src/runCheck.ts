@@ -15,8 +15,9 @@ export interface CheckOptions {
   /** Project root. Defaults to `process.cwd()`. */
   root?: string;
   /**
-   * Vite config to build with. Defaults to `<root>/vite.config.ts`.
-   * Fixtures pass `false` and rely on `input`.
+   * Vite config to build with. Omitted: Vite searches its usual names
+   * (`vite.config.js`, `.mjs`, `.ts`, `.cjs`, `.mts`, `.cts`). Fixtures
+   * pass `false` and rely on `input`.
    */
   configFile?: string | false;
   /** Entry module, used when `configFile` is false. Defaults to `src/main.ts`. */
@@ -45,7 +46,7 @@ interface PackageJson {
 
 export async function check(options: CheckOptions = {}): Promise<CheckResult> {
   const root = path.resolve(options.root ?? process.cwd());
-  const configFile = options.configFile ?? path.join(root, "vite.config.ts");
+  const configFile = options.configFile;
   const input =
     options.input ?? (configFile === false ? "src/main.ts" : undefined);
 
@@ -55,7 +56,7 @@ export async function check(options: CheckOptions = {}): Promise<CheckResult> {
 
   const { packages, chunkCount } = await collectBundledPackages({
     root,
-    configFile,
+    ...(configFile === undefined ? {} : { configFile }),
     ...(input === undefined ? {} : { input }),
   });
 
