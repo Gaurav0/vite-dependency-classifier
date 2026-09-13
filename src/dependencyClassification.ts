@@ -1,0 +1,100 @@
+/**
+ * Classify package.json fields against what actually landed in the bundle.
+ * No filesystem or build — that's in collectBundledPackages.
+ *
+ * See README.md ("Dependencies") for the policy.
+ */
+
+const NODE_MODULES = "/node_modules/";
+
+/**
+ * Package name from a Rollup/Rolldown module id, or null for first-party
+ * and virtual modules.
+ *
+ * Nested node_modules (pnpm store, hoisted deps) put a store dir in the
+ * first `/node_modules/` segment. The last one is the actual package.
+ */
+export function packageNameFromModuleId(id: string): string | null {
+  // Virtual modules get a NUL prefix from Rollup. Some (\0commonjsHelpers.js)
+  // have no slashes, so catch them before the path walk.
+  if (id.startsWith("\0")) {
+    return null;
+  }
+
+  const lastIndex = id.lastIndexOf(NODE_MODULES);
+  if (lastIndex === -1) {
+    return null;
+  }
+
+  const segments = id.slice(lastIndex + NODE_MODULES.length).split("/");
+  const [first, second] = segments;
+
+  if (!first) {
+    return null;
+  }
+
+  // A dotted first segment is a store directory, not a package name.
+  if (first.startsWith(".")) {
+    return null;
+  }
+
+  if (first.startsWith("@")) {
+    return second ? `${first}/${second}` : null;
+  }
+
+  return first;
+}
+
+export interface ClassifyPackagesInput {
+  /** Package names that reached the production bundle. */
+  bundled: Iterable<string>;
+  /** Names from package.json `dependencies`. */
+  dependencies: Iterable<string>;
+  /** Names from package.json `devDependencies`. */
+  devDependencies: Iterable<string>;
+  /**
+   * Runtime peers that never show up in the bundle under their own name
+   * (e.g. @emotion/react pulled in by a UI library). Skipped by `extra`.
+   */
+  runtimePeers?: Iterable<string>;
+}
+
+export interface Classification {
+  /** Declared as devDependencies but present in the production bundle. */
+  missing: string[];
+  /** Declared as dependencies but absent from the production bundle. */
+  extra: string[];
+}
+
+/**
+ * Compare the production bundle against package.json.
+ *
+ * `missing` is bundled packages that are declared as devDependencies —
+ * not "everything in the bundle that isn't a dependency". Transitive
+ * packages (scheduler via react-dom, etc.) show up in the bundle but
+ * aren't declared, and that's fine.
+ *
+ * A phantom — imported in src/ but listed in neither field — looks
+ * identical to a transitive dep here. That's a different check.
+ */
+export function classifyPackages({
+  bundled,
+  dependencies,
+  devDependencies,
+  runtimePeers = [],
+}: ClassifyPackagesInput): Classification {
+  const bundledSet = new Set(bundled);
+  const dependencySet = new Set(dependencies);
+  const runtimePeerSet = new Set(runtimePeers);
+
+  const missing = [...new Set(devDependencies)]
+    // Listed in both → treat as a production dep, don't report it.
+    .filter((name) => !dependencySet.has(name) && bundledSet.has(name))
+    .sort();
+
+  const extra = [...dependencySet]
+    .filter((name) => !bundledSet.has(name) && !runtimePeerSet.has(name))
+    .sort();
+
+  return { missing, extra };
+}

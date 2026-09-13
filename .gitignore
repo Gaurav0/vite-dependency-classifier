@@ -1,0 +1,25 @@
+# Dependencies
+node_modules
+
+# Build / typecheck
+dist
+*.tsbuildinfo
+*.tgz
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Tooling
+.eslintcache
+coverage
+.vitest-attachments/
+
+# Environment and editor
+.env
+.DS_Store
+.idea
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json

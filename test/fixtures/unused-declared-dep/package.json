@@ -1,0 +1,8 @@
+{
+  "name": "fixture-unused-declared-dep",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "unused-pkg": "*"
+  }
+}

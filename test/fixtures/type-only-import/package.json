@@ -1,0 +1,8 @@
+{
+  "name": "fixture-type-only-import",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "fixture-lib": "*"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "extends": "@tsconfig/strictest/tsconfig.json",
+  "compilerOptions": {
+    /* Matches the Node 22+ floor in package.json engines. */
+    "target": "es2023",
+    "lib": ["ES2023"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+
+    /* Required for Node's type stripper; not in @tsconfig/strictest. */
+    "erasableSyntaxOnly": true,
+    "noUncheckedSideEffectImports": true,
+    "allowJs": false,
+
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts"],
+  "exclude": ["test/fixtures"]
+}

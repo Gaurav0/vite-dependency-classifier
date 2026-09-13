@@ -1,0 +1,8 @@
+{
+  "name": "fixture-undeclared-runtime-import",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "fixture-lib": "*"
+  }
+}

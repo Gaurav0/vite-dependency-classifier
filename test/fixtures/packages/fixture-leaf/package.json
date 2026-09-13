@@ -1,0 +1,7 @@
+{
+  "name": "fixture-leaf",
+  "private": true,
+  "type": "module",
+  "sideEffects": true,
+  "exports": "./index.ts"
+}
