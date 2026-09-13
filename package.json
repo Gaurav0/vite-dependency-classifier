@@ -2,6 +2,18 @@
   "name": "vite-dependency-classifier",
   "version": "0.1.0",
   "description": "Check that a Vite project's dependencies/devDependencies split matches what the production build actually contains.",
+  "keywords": [
+    "vite",
+    "dependencies",
+    "devDependencies",
+    "classification",
+    "production",
+    "bundle",
+    "cli",
+    "ci",
+    "audit",
+    "package.json"
+  ],
   "author": "Gaurav Munjal <Gaurav0@aol.com>",
   "repository": {
     "type": "git",
