@@ -176,7 +176,8 @@ The `typescript` package name is aliased to TypeScript 6 so
 The tsconfig extends `@tsconfig/strictest` and also turns on
 `erasableSyntaxOnly` and `noUncheckedSideEffectImports`. Development
 typechecks with `noEmit`. `npm run build` (also `prepack`) emits `dist/` for
-the published package.
+the published package. `npm publish` runs `prepublishOnly` (`npm test`)
+before that pack, so a red tree cannot ship.
 
 ## Development
 
