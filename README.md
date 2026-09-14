@@ -87,7 +87,7 @@ vite-dependency-classifier \
   --transitive-dev some-util  # listed as a devDependency; only in the bundle via a library
 ```
 
-## Library
+## Programmatic use
 
 ```ts
 import { check } from "vite-dependency-classifier";
