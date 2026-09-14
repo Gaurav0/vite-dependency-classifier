@@ -86,6 +86,27 @@ describe("parseCli", () => {
     });
   });
 
+  it("records --library", () => {
+    expect(parseCli(["--library"])).toMatchObject({
+      kind: "check",
+      options: { projectType: "library" },
+    });
+  });
+
+  it("records --app", () => {
+    expect(parseCli(["--app"])).toMatchObject({
+      kind: "check",
+      options: { projectType: "app" },
+    });
+  });
+
+  it("rejects --app and --library together", () => {
+    expect(parseCli(["--app", "--library"])).toEqual({
+      kind: "usage",
+      message: "Cannot pass both --app and --library.",
+    });
+  });
+
   it("rejects an unknown flag", () => {
     const parsed = parseCli(["--nope"]);
     expect(parsed.kind).toBe("usage");
@@ -117,6 +138,8 @@ describe("bin", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toBe(`${helpText()}\n`);
     expect(helpText()).toMatch(/unlisted/);
+    expect(helpText()).toMatch(/--library/);
+    expect(helpText()).toMatch(/--app/);
   });
 
   it("prints the package version and exits 0", () => {
@@ -132,6 +155,12 @@ describe("bin", () => {
     expect(result.stderr).toContain(
       "Try 'vite-dependency-classifier --help' for more information.",
     );
+  });
+
+  it("exits 2 when --app and --library are both passed", () => {
+    const result = spawnCli("--app", "--library");
+    expect(result.status).toBe(2);
+    expect(result.stderr).toMatch(/cannot pass both --app and --library/i);
   });
 
   it("exempts a runtime peer passed as --runtime-peer", () => {
@@ -188,6 +217,21 @@ describe("bin", () => {
     expect(result.stderr).toContain("fixture-lib");
     expect(result.stderr).toMatch(/imported by production source/i);
   });
+
+  it("exits 1 when an app imports a package listed only as a peer", () => {
+    const root = fileURLToPath(
+      new URL("./fixtures/peer-import", import.meta.url),
+    );
+
+    const asApp = spawnCli(root, "--input", "src/main.ts");
+    expect(asApp.status).toBe(1);
+    expect(asApp.stderr).toContain("fixture-lib");
+    expect(asApp.stderr).toContain("--library");
+
+    const asLibrary = spawnCli(root, "--input", "src/main.ts", "--library");
+    expect(asLibrary.status).toBe(0);
+    expect(asLibrary.stdout).toContain("Dependency classification is correct.");
+  });
 });
 
 describe("formatCheckResult", () => {
@@ -198,6 +242,7 @@ describe("formatCheckResult", () => {
     unlisted: [],
     packages: new Set(),
     chunkCount: 1,
+    projectType: "app",
   };
 
   it("points extra failures at --runtime-peer, with the reason next to the flag", () => {
@@ -218,6 +263,7 @@ describe("formatCheckResult", () => {
     unlisted: [],
     packages: new Set(["fixture-lib", "fixture-leaf"]),
     chunkCount: 1,
+    projectType: "app",
   };
 
   it("points missing failures at --transitive-dev, with the reason next to the flag", () => {
@@ -239,6 +285,7 @@ describe("formatCheckResult", () => {
     unlisted: ["fixture-lib"],
     packages: new Set(["fixture-lib", "fixture-leaf"]),
     chunkCount: 1,
+    projectType: "app",
   };
 
   it("names unlisted packages and says they belong in dependencies", () => {
@@ -248,12 +295,20 @@ describe("formatCheckResult", () => {
     });
     expect(stderr).toContain("fixture-lib");
     expect(stderr).toMatch(/imported by production source/i);
-    expect(stderr).toMatch(/peerDependencies/);
     expect(stderr).toMatch(/optionalDependencies/);
     expect(stderr).toMatch(/belong in dependencies/i);
-    expect(stderr).not.toMatch(/--\w/);
+    expect(stderr).toContain("--library");
     expect(stderr).not.toContain("directPackages");
     expect(stdout).not.toContain("Dependency classification is correct.");
+  });
+
+  it("lists peerDependencies in unlisted copy for a library", () => {
+    const { stderr } = formatCheckResult(
+      { ...unlistedResult, projectType: "library" },
+      { json: false, quiet: false },
+    );
+    expect(stderr).toMatch(/peerDependencies/);
+    expect(stderr).not.toContain("--library");
   });
 
   it("includes unlisted in JSON and omits the full direct set", () => {
@@ -269,6 +324,7 @@ describe("formatCheckResult", () => {
       unlisted: ["fixture-lib"],
       packages: ["fixture-leaf", "fixture-lib"],
       chunkCount: 1,
+      projectType: "app",
     });
     expect(stdout).not.toContain("directPackages");
   });

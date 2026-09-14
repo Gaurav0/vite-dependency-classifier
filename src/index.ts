@@ -11,4 +11,9 @@ export {
   type ClassifyUnlistedInput,
   type Classification,
 } from "./dependencyClassification.ts";
-export { check, type CheckOptions, type CheckResult } from "./runCheck.ts";
+export {
+  check,
+  type CheckOptions,
+  type CheckResult,
+  type ProjectType,
+} from "./runCheck.ts";

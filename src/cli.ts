@@ -38,9 +38,10 @@ export function helpText(): string {
 Usage: ${CLI_NAME} [options] [root]
 
 Check that a Vite project's dependencies/devDependencies split matches
-what the production build actually contains. First-party production
-imports listed in none of dependencies, devDependencies,
-peerDependencies, or optionalDependencies fail as unlisted.
+what the production build actually contains. Default: application.
+First-party production imports listed in none of dependencies,
+devDependencies, or optionalDependencies fail as unlisted. Pass
+--library so peerDependencies also count as declared.
 
 Arguments:
   root                   Project root (default: current directory)
@@ -48,6 +49,10 @@ Arguments:
 Options:
   -c, --config <file>    Vite config file (default: vite.config.*)
   --input <file>         Entry module when no Vite config is used
+  --app                  Treat the project as an application (default).
+                         Peer-only first-party imports are unlisted.
+  --library              Treat the project as a library. Peer-only
+                         first-party imports are not unlisted.
   --runtime-peer <name>  Exempt a runtime peer from the extra check
                          (repeatable). Put the reason next to the flag.
   --transitive-dev <name>
@@ -55,7 +60,7 @@ Options:
                          missing check (repeatable). Put the reason next
                          to the flag.
   --json                 Print the result as JSON (ok, missing, extra,
-                         unlisted, packages, chunkCount)
+                         unlisted, packages, chunkCount, projectType)
   -q, --quiet            Print only classification failures
   -h, --help             Show this help
   -v, --version          Show version`;
@@ -73,6 +78,8 @@ export function parseCli(argv: string[]): ParsedCli {
     version?: boolean;
     config?: string;
     input?: string;
+    app?: boolean;
+    library?: boolean;
     "runtime-peer"?: string[];
     "transitive-dev"?: string[];
     json?: boolean;
@@ -90,6 +97,8 @@ export function parseCli(argv: string[]): ParsedCli {
         version: { type: "boolean", short: "v" },
         config: { type: "string", short: "c" },
         input: { type: "string" },
+        app: { type: "boolean" },
+        library: { type: "boolean" },
         "runtime-peer": { type: "string", multiple: true },
         "transitive-dev": { type: "string", multiple: true },
         json: { type: "boolean" },
@@ -119,6 +128,13 @@ export function parseCli(argv: string[]): ParsedCli {
     };
   }
 
+  if (values.app === true && values.library === true) {
+    return {
+      kind: "usage",
+      message: "Cannot pass both --app and --library.",
+    };
+  }
+
   return {
     kind: "check",
     options: {
@@ -127,6 +143,8 @@ export function parseCli(argv: string[]): ParsedCli {
         ? {}
         : { configFile: path.resolve(values.config) }),
       ...(values.input === undefined ? {} : { input: values.input }),
+      ...(values.app === true ? { projectType: "app" as const } : {}),
+      ...(values.library === true ? { projectType: "library" as const } : {}),
       ...(values["runtime-peer"] === undefined
         ? {}
         : { runtimePeers: values["runtime-peer"] }),
@@ -152,6 +170,7 @@ export function formatCheckResult(
         unlisted: result.unlisted,
         packages: [...result.packages].sort(),
         chunkCount: result.chunkCount,
+        projectType: result.projectType,
       }),
       stderr: "",
     };
@@ -195,12 +214,25 @@ export function formatCheckResult(
   }
 
   if (result.unlisted.length > 0) {
-    stderr.push(
-      "\nImported by production source, but listed in none of dependencies,\n" +
-        "devDependencies, peerDependencies, or optionalDependencies:",
-    );
-    for (const name of result.unlisted) stderr.push(`  ${name}`);
-    stderr.push("\nThese ship to users, so they belong in dependencies.");
+    if (result.projectType === "library") {
+      stderr.push(
+        "\nImported by production source, but listed in none of dependencies,\n" +
+          "devDependencies, peerDependencies, or optionalDependencies:",
+      );
+      for (const name of result.unlisted) stderr.push(`  ${name}`);
+      stderr.push("\nThese ship to users, so they belong in dependencies.");
+    } else {
+      stderr.push(
+        "\nImported by production source, but listed in none of dependencies,\n" +
+          "devDependencies, or optionalDependencies:",
+      );
+      for (const name of result.unlisted) stderr.push(`  ${name}`);
+      stderr.push(
+        "\nThese ship to users, so they belong in dependencies. A\n" +
+          "peerDependency is not enough for an application. Pass `--library`\n" +
+          "if this project is a library.",
+      );
+    }
   }
 
   if (!result.ok) {

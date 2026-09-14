@@ -168,16 +168,17 @@ export interface ClassifyUnlistedInput {
   dependencies: Iterable<string>;
   /** Names from package.json `devDependencies`. */
   devDependencies: Iterable<string>;
-  /** Names from package.json `peerDependencies`. */
+  /** Names from package.json `peerDependencies`. Pass for a library. */
   peerDependencies?: Iterable<string>;
   /** Names from package.json `optionalDependencies`. */
   optionalDependencies?: Iterable<string>;
 }
 
 /**
- * Direct first-party production imports that are listed in none of
- * `dependencies`, `devDependencies`, `peerDependencies`, or
- * `optionalDependencies`.
+ * Direct first-party production imports that are listed in none of the
+ * fields passed in. An application omits `peerDependencies` so a
+ * peer-only import is unlisted. A library passes them so a peer counts
+ * as declared.
  *
  * `missing` / `extra` stay in `classifyPackages`. A direct import that
  * is already a `devDependency` is declared, so it is not unlisted.

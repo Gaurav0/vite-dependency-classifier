@@ -26,6 +26,7 @@ npx vite-dependency-classifier
 npx vite-dependency-classifier /path/to/project
 npx vite-dependency-classifier --config vite.config.prod.ts
 npx vite-dependency-classifier --json
+npx vite-dependency-classifier --library
 # some-peer: required at runtime, never in the bundle by name
 npx vite-dependency-classifier --runtime-peer some-peer
 # some-util: listed as a devDependency; only in the bundle via a library
@@ -36,9 +37,11 @@ npx vite-dependency-classifier --transitive-dev some-util
 - `-v, --version` — print the package version and exit
 - `-c, --config <file>` — Vite config file (default: the names Vite searches)
 - `--input <file>` — entry module, for projects without a Vite config
+- `--app` — treat the project as an application (default). A first-party import listed only in `peerDependencies` is `unlisted`.
+- `--library` — treat the project as a library. A first-party import listed only in `peerDependencies` is declared, so it is not `unlisted`.
 - `--runtime-peer <name>` — exempt a runtime peer from the extra check (repeatable). Put the reason in a comment next to the flag in the script or CI step that passes it.
 - `--transitive-dev <name>` — exempt a transitive-only `devDependency` from the missing check (repeatable). Put the reason in a comment next to the flag in the script or CI step that passes it. Do not change the declaration.
-- `--json` — print the result as JSON (`ok`, `missing`, `extra`, `unlisted`, `packages`, `chunkCount`)
+- `--json` — print the result as JSON (`ok`, `missing`, `extra`, `unlisted`, `packages`, `chunkCount`, `projectType`)
 - `-q, --quiet` — print only classification failures
 
 The command reads that project's `package.json` and Vite config (the same
@@ -46,9 +49,10 @@ names Vite searches: `vite.config.js`, `.mjs`, `.ts`, `.cjs`, `.mts`,
 `.cts`), runs a production build (nothing is written to disk), and exits
 `1` if a declared `devDependency` reached the bundle, a declared
 `dependency` did not, or production source imported a package listed in
-none of `dependencies`, `devDependencies`, `peerDependencies`, or
-`optionalDependencies`. A usage error (unknown flag, extra argument) exits
-`2`.
+none of `dependencies`, `devDependencies`, or `optionalDependencies`
+(and, with `--library`, none of `peerDependencies` either). Default is
+application. A usage error (unknown flag, extra argument, both `--app`
+and `--library`) exits `2`.
 
 The published CLI is compiled JavaScript (`dist/check.js`). A clone can still
 run the TypeScript source with Node's type stripper:
@@ -89,6 +93,8 @@ vite-dependency-classifier \
 import { check } from "vite-dependency-classifier";
 
 const { ok, missing, extra, unlisted } = await check();
+
+await check({ projectType: "library" });
 ```
 
 ```js
@@ -99,7 +105,8 @@ const { ok, missing, extra, unlisted } = await check();
 
 Pass `runtimePeers` the same way the CLI takes `--runtime-peer`, and
 `transitiveDevs` the same way it takes `--transitive-dev`, with the
-reason on the line that adds each name.
+reason on the line that adds each name. Pass `projectType: "library"`
+the same way the CLI takes `--library`.
 
 `collectBundledPackages` (the bundle set and `directPackages`),
 `classifyPackages`, and `classifyUnlisted` are also exported for callers
@@ -113,7 +120,9 @@ time. `dist/` is not committed. Installing from a GitHub source tree needs
 
 `package.json` splits packages into `dependencies` and `devDependencies`.
 `missing` and `extra` follow that split. `unlisted` also treats
-`peerDependencies` and `optionalDependencies` as declared.
+`optionalDependencies` as declared. `peerDependencies` count as declared
+for `unlisted` only when the project is a library (`--library` /
+`projectType: "library"`). The default is an application.
 
 ### The definition
 
@@ -125,12 +134,12 @@ runners, type packages, and anything eliminated from the production bundle.
 
 ### Cases that are not obvious
 
-**A first-party production import listed in none of the four fields is
+**A first-party production import listed in none of the declared fields is
 `unlisted`.** First-party means source under this project's root, after
-hopping Vite virtuals (`\0…`, `virtual:`) and same-package wrappers
-(CommonJS proxies). It resolved because it was hoisted or walked up from
-another install. It shipped, so it belongs in `dependencies`. There is
-no exemption flag.
+hopping Vite virtuals and same-package wrappers (CommonJS proxies). It
+resolved because it was hoisted or walked up from another install. It
+shipped, so it belongs in `dependencies`. There is no per-package
+exemption flag.
 
 **A Vite alias that points at another package's source is not first-party.**
 Those files sit outside this project's root, so their imports are treated
@@ -138,14 +147,20 @@ like another package's: they are not `unlisted` here. Install the workspace
 package through `node_modules` (`workspace:*`, `file:`) and run this check
 on that package if you want its own `package.json` classified.
 
+**A package listed only in `peerDependencies` is `unlisted` in an
+application, and listed in a library.** Applications should put a
+first-party production import in `dependencies`. Libraries use peers for
+packages the host must provide; pass `--library` (or `projectType:
+"library"`) so those count as declared. `optionalDependencies` are
+declared in both modes.
+
 **A package can be a runtime dependency without being imported by name.** Peer
 dependencies pulled in at runtime by a dependency's own code still belong in
 `dependencies`. They often reach the bundle under their own names, in which
 case this check sees them without help. A package that is required at runtime
 and _never_ appears in the bundle under its own name needs an explicit
 exemption — `--runtime-peer` on the CLI, or `runtimePeers` on `check()` —
-with a stated reason next to that flag or call. A package listed only in
-`peerDependencies` and imported by first-party source is not `unlisted`.
+with a stated reason next to that flag or call.
 
 **A dev-only tool imported from a production source file must be behind an
 `import.meta.env.DEV` guard**, so the bundler removes it — rather than relying
@@ -187,10 +202,11 @@ This package _is_ the check. `missing` is a declared `devDependency` present
 in the production bundle, unless it is listed in `transitiveDevs` because
 that presence is only transitive. `extra` is a declared `dependency` absent
 from it. `unlisted` is a first-party production import listed in none of
-`dependencies`, `devDependencies`, `peerDependencies`, or
-`optionalDependencies`. First-party means source under this project's
-root. Transitive packages that appear in the bundle and are declared
-nowhere are not reported unless that source imported them.
+`dependencies`, `devDependencies`, or `optionalDependencies` — and, for a
+library, none of `peerDependencies` either. First-party means source
+under this project's root. Transitive packages that appear in the bundle
+and are declared nowhere are not reported unless that source imported
+them.
 
 ## Engines
 

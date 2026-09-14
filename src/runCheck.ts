@@ -12,6 +12,8 @@ import {
   type Classification,
 } from "./dependencyClassification.ts";
 
+export type ProjectType = "app" | "library";
+
 export interface CheckOptions {
   /** Project root. Defaults to `process.cwd()`. */
   root?: string;
@@ -23,6 +25,12 @@ export interface CheckOptions {
   configFile?: string | false;
   /** Entry module, used when `configFile` is false. Defaults to `src/main.ts`. */
   input?: string;
+  /**
+   * Application (default) or library. An app treats a first-party import
+   * listed only in `peerDependencies` as `unlisted`. A library counts
+   * peers as declared.
+   */
+  projectType?: ProjectType;
   /**
    * Runtime peers that never appear in the bundle under their own name.
    * Exempt from the `extra` check. Note why each one is here at the call site
@@ -43,11 +51,13 @@ export interface CheckResult extends Classification {
   /** Number of output chunks. */
   chunkCount: number;
   /**
-   * Direct first-party production imports listed in none of
-   * `dependencies`, `devDependencies`, `peerDependencies`, or
-   * `optionalDependencies`.
+   * Direct first-party production imports listed in none of the declared
+   * fields. For an app that is `dependencies`, `devDependencies`, and
+   * `optionalDependencies`. For a library, `peerDependencies` too.
    */
   unlisted: string[];
+  /** Application (default) or library. Controls whether peers count as listed. */
+  projectType: ProjectType;
   /** True when `missing`, `extra`, and `unlisted` are all empty. */
   ok: boolean;
 }
@@ -64,6 +74,7 @@ export async function check(options: CheckOptions = {}): Promise<CheckResult> {
   const configFile = options.configFile;
   const input =
     options.input ?? (configFile === false ? "src/main.ts" : undefined);
+  const projectType = options.projectType ?? "app";
 
   const packageJson = JSON.parse(
     readFileSync(path.join(root, "package.json"), "utf8"),
@@ -100,8 +111,8 @@ export async function check(options: CheckOptions = {}): Promise<CheckResult> {
     direct: directPackages,
     dependencies,
     devDependencies,
-    peerDependencies,
     optionalDependencies,
+    ...(projectType === "library" ? { peerDependencies } : {}),
   });
 
   return {
@@ -110,6 +121,7 @@ export async function check(options: CheckOptions = {}): Promise<CheckResult> {
     unlisted,
     packages,
     chunkCount,
+    projectType,
     ok: missing.length === 0 && extra.length === 0 && unlisted.length === 0,
   };
 }

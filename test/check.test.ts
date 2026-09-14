@@ -89,12 +89,25 @@ describe("check", () => {
     expect(result.unlisted).toEqual([]);
   });
 
-  it("treats a first-party import declared only as a peerDependency as listed", async () => {
+  it("treats a first-party import declared only as a peerDependency as unlisted for an app", async () => {
     const result = await check({
       root: fixture("peer-import"),
       configFile: false,
     });
 
+    expect(result.projectType).toBe("app");
+    expect(result.ok).toBe(false);
+    expect(result.unlisted).toEqual(["fixture-lib"]);
+  });
+
+  it("treats a first-party import declared only as a peerDependency as listed for a library", async () => {
+    const result = await check({
+      root: fixture("peer-import"),
+      configFile: false,
+      projectType: "library",
+    });
+
+    expect(result.projectType).toBe("library");
     expect(result.ok).toBe(true);
     expect(result.unlisted).toEqual([]);
   });

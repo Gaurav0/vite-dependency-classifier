@@ -289,6 +289,8 @@ describe("classifyUnlisted", () => {
   });
 
   it("ignores a direct import listed in peerDependencies", () => {
+    // Library callers pass peerDependencies. Apps omit the field so a
+    // peer-only import is unlisted — see check() / --library.
     expect(
       classifyUnlisted({
         ...base,

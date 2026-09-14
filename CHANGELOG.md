@@ -13,16 +13,17 @@ and this project adheres to
 ### Added
 
 - `unlisted` finding: first-party production imports listed in none of
-  `dependencies`, `devDependencies`, `peerDependencies`, or
-  `optionalDependencies`. Fails `ok` and CLI exit `1`. First-party is
-  source under the project root; Vite aliases to another package's
-  source are not. Virtual wrappers (`\0…`, `virtual:`) and same-package
-  proxies (CommonJS) are hops, not first-party.
+  `dependencies`, `devDependencies`, or `optionalDependencies`. Fails
+  `ok` and CLI exit `1`. First-party is source under the project root;
+  Vite aliases to another package's source are not. Virtual wrappers
+  (`\0…`, `virtual:`) and same-package proxies (CommonJS) are hops, not
+  first-party.
+- `--app` / `--library` (`projectType`). Default is `app`. A library
+  also treats `peerDependencies` as declared for `unlisted`.
 - `collectBundledPackages` returns `directPackages`.
 - Exported `classifyUnlisted`.
-- `--json` includes `unlisted`.
-- `peerDependencies` and `optionalDependencies` count as declared for
-  `unlisted` only.
+- `--json` includes `unlisted` and `projectType`.
+- `optionalDependencies` count as declared for `unlisted`.
 
 ### Fixed
 
