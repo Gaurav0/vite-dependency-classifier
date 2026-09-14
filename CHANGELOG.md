@@ -8,6 +8,15 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-13
+
+### Added
+
+- `--transitive-dev` / `transitiveDevs` to exempt a correctly declared
+  `devDependency` whose production-bundle presence is only transitive. A
+  `missing` failure now points at that flag instead of only saying to move
+  the package to `dependencies`.
+
 ## [0.1.0] - 2026-09-13
 
 Initial release. Classification comes from a real production Vite build, not a
@@ -34,5 +43,6 @@ not treated as a runtime dependency.
 - CI on Node 22, 24, and 26. `npm publish` runs `prepublishOnly` (`npm test`)
   so a red tree cannot ship.
 
-[unreleased]: https://github.com/Gaurav0/vite-dependency-classifier/compare/v0.1.0...HEAD
+[unreleased]: https://github.com/Gaurav0/vite-dependency-classifier/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/Gaurav0/vite-dependency-classifier/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Gaurav0/vite-dependency-classifier/releases/tag/v0.1.0

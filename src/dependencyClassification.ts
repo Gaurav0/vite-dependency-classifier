@@ -57,6 +57,12 @@ export interface ClassifyPackagesInput {
    * (e.g. @emotion/react pulled in by a UI library). Skipped by `extra`.
    */
   runtimePeers?: Iterable<string>;
+  /**
+   * Correct `devDependencies` whose bundle presence is only transitive
+   * (e.g. a test util that a shipped library also depends on). Skipped
+   * by `missing`.
+   */
+  transitiveDevs?: Iterable<string>;
 }
 
 export interface Classification {
@@ -82,14 +88,21 @@ export function classifyPackages({
   dependencies,
   devDependencies,
   runtimePeers = [],
+  transitiveDevs = [],
 }: ClassifyPackagesInput): Classification {
   const bundledSet = new Set(bundled);
   const dependencySet = new Set(dependencies);
   const runtimePeerSet = new Set(runtimePeers);
+  const transitiveDevSet = new Set(transitiveDevs);
 
   const missing = [...new Set(devDependencies)]
     // Listed in both → treat as a production dep, don't report it.
-    .filter((name) => !dependencySet.has(name) && bundledSet.has(name))
+    .filter(
+      (name) =>
+        !dependencySet.has(name) &&
+        bundledSet.has(name) &&
+        !transitiveDevSet.has(name),
+    )
     .sort();
 
   const extra = [...dependencySet]

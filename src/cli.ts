@@ -48,6 +48,10 @@ Options:
   --input <file>         Entry module when no Vite config is used
   --runtime-peer <name>  Exempt a runtime peer from the extra check
                          (repeatable). Put the reason next to the flag.
+  --transitive-dev <name>
+                         Exempt a transitive-only devDependency from the
+                         missing check (repeatable). Put the reason next
+                         to the flag.
   --json                 Print the result as JSON
   -q, --quiet            Print only classification failures
   -h, --help             Show this help
@@ -67,6 +71,7 @@ export function parseCli(argv: string[]): ParsedCli {
     config?: string;
     input?: string;
     "runtime-peer"?: string[];
+    "transitive-dev"?: string[];
     json?: boolean;
     quiet?: boolean;
   };
@@ -83,6 +88,7 @@ export function parseCli(argv: string[]): ParsedCli {
         config: { type: "string", short: "c" },
         input: { type: "string" },
         "runtime-peer": { type: "string", multiple: true },
+        "transitive-dev": { type: "string", multiple: true },
         json: { type: "boolean" },
         quiet: { type: "boolean", short: "q" },
       },
@@ -121,6 +127,9 @@ export function parseCli(argv: string[]): ParsedCli {
       ...(values["runtime-peer"] === undefined
         ? {}
         : { runtimePeers: values["runtime-peer"] }),
+      ...(values["transitive-dev"] === undefined
+        ? {}
+        : { transitiveDevs: values["transitive-dev"] }),
     },
     json: values.json === true,
     quiet: values.quiet === true,
@@ -160,8 +169,11 @@ export function formatCheckResult(
     for (const name of result.missing) stderr.push(`  ${name}`);
     stderr.push(
       "\nThese ship to users, so they belong in dependencies — or the import\n" +
-        "should be removed or guarded. A devDependency that ships is an exposure\n" +
-        "that `npm audit --omit=dev` will not show you.",
+        "should be removed or guarded. If they only appear because a\n" +
+        "dependency pulled them in, pass `--transitive-dev <name>`. Put the\n" +
+        "reason next to the flag in the script or CI step that runs this\n" +
+        "command. Do not change the declaration. A devDependency that ships\n" +
+        "is an exposure that `npm audit --omit=dev` will not show you.",
     );
   }
 

@@ -1,0 +1,11 @@
+{
+  "name": "fixture-transitive-dev",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "fixture-lib": "*"
+  },
+  "devDependencies": {
+    "fixture-leaf": "*"
+  }
+}

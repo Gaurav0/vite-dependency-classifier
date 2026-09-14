@@ -19,6 +19,25 @@ describe("check", () => {
     expect(result.packages.has("fixture-lib")).toBe(true);
   });
 
+  it("exempts a transitive-only devDependency passed as transitiveDevs", async () => {
+    const root = fixture("transitive-dev");
+
+    const without = await check({
+      root,
+      configFile: false,
+    });
+    expect(without.ok).toBe(false);
+    expect(without.missing).toEqual(["fixture-leaf"]);
+
+    const withAllowlist = await check({
+      root,
+      configFile: false,
+      transitiveDevs: ["fixture-leaf"],
+    });
+    expect(withAllowlist.ok).toBe(true);
+    expect(withAllowlist.missing).toEqual([]);
+  });
+
   it("discovers vite.config.js when configFile is omitted", async () => {
     const result = await check({
       root: fixture("config-js"),
