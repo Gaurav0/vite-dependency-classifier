@@ -27,23 +27,27 @@
   "type": "module",
   "files": [
     "dist",
-    "index.cjs"
+    "index.cjs",
+    "CHANGELOG.md"
   ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./index.cjs"
-    }
+    },
+    "./package.json": "./package.json"
   },
+  "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "sideEffects": false,
   "bin": {
-    "vite-dependency-classifier": "./dist/check.js"
+    "vite-dependency-classifier": "dist/check.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "prepack": "npm run build",
-    "prepublishOnly": "npm test",
+    "prepublishOnly": "npm run lint && npm test",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
