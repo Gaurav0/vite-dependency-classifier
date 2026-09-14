@@ -73,6 +73,7 @@
     "eslint-plugin-prettier": "^5.5.6",
     "fixture-cjs": "file:test/fixtures/packages/fixture-cjs",
     "fixture-css": "file:test/fixtures/packages/fixture-css",
+    "fixture-css-theme": "file:test/fixtures/packages/fixture-css-theme",
     "fixture-leaf": "file:test/fixtures/packages/fixture-leaf",
     "fixture-lib": "file:test/fixtures/packages/fixture-lib",
     "fixture-sass": "file:test/fixtures/packages/fixture-sass",
