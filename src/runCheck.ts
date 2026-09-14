@@ -28,6 +28,12 @@ export interface CheckOptions {
    * — an uncommented allowlist entry looks like a silenced failure.
    */
   runtimePeers?: Iterable<string>;
+  /**
+   * Correct `devDependencies` whose bundle presence is only transitive.
+   * Exempt from the `missing` check. Note why each one is here at the call
+   * site — an uncommented allowlist entry looks like a silenced failure.
+   */
+  transitiveDevs?: Iterable<string>;
 }
 
 export interface CheckResult extends Classification {
@@ -67,6 +73,9 @@ export async function check(options: CheckOptions = {}): Promise<CheckResult> {
     ...(options.runtimePeers === undefined
       ? {}
       : { runtimePeers: options.runtimePeers }),
+    ...(options.transitiveDevs === undefined
+      ? {}
+      : { transitiveDevs: options.transitiveDevs }),
   });
 
   return {

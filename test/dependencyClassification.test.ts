@@ -134,6 +134,35 @@ describe("classifyPackages", () => {
     ).toEqual({ missing: [], extra: [] });
   });
 
+  it("exempts a bundled transitive devDependency from the missing check", () => {
+    expect(
+      classifyPackages({
+        ...base,
+        bundled: ["fixture-lib", "fixture-leaf"],
+        dependencies: ["fixture-lib"],
+        devDependencies: ["fixture-leaf"],
+        transitiveDevs: ["fixture-leaf"],
+      }),
+    ).toEqual({ missing: [], extra: [] });
+  });
+
+  it("reports a bundled transitive devDependency without the allowlist", () => {
+    expect(
+      classifyPackages({
+        ...base,
+        bundled: ["fixture-lib", "fixture-leaf"],
+        dependencies: ["fixture-lib"],
+        devDependencies: ["fixture-leaf"],
+      }),
+    ).toEqual({ missing: ["fixture-leaf"], extra: [] });
+  });
+
+  it("tolerates a transitive dev that is not declared at all", () => {
+    expect(
+      classifyPackages({ ...base, transitiveDevs: ["fixture-leaf"] }),
+    ).toEqual({ missing: [], extra: [] });
+  });
+
   it("treats a package declared in both fields as a dependency", () => {
     expect(
       classifyPackages({

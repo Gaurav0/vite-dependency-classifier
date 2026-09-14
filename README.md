@@ -27,6 +27,8 @@ npx vite-dependency-classifier --config vite.config.prod.ts
 npx vite-dependency-classifier --json
 # some-peer: required at runtime, never in the bundle by name
 npx vite-dependency-classifier --runtime-peer some-peer
+# some-util: listed as a devDependency; only in the bundle via a library
+npx vite-dependency-classifier --transitive-dev some-util
 ```
 
 - `-h, --help` — print usage and exit
@@ -34,6 +36,7 @@ npx vite-dependency-classifier --runtime-peer some-peer
 - `-c, --config <file>` — Vite config file (default: the names Vite searches)
 - `--input <file>` — entry module, for projects without a Vite config
 - `--runtime-peer <name>` — exempt a runtime peer from the extra check (repeatable). Put the reason in a comment next to the flag in the script or CI step that passes it.
+- `--transitive-dev <name>` — exempt a transitive-only `devDependency` from the missing check (repeatable). Put the reason in a comment next to the flag in the script or CI step that passes it. Do not change the declaration.
 - `--json` — print the result as JSON
 - `-q, --quiet` — print only classification failures
 
@@ -67,13 +70,14 @@ build (nothing is written to disk), so it does not need a prior `npm run build`.
 ```
 
 Leave `-q` off so a green job still prints the chunk and package counts. Do
-not put `--runtime-peer` in the npm script: JSON cannot hold the required
-reason next to the flag. Put the command in a commentable file — a small
-`scripts/check-deps.sh`, or the CI step itself:
+not put `--runtime-peer` or `--transitive-dev` in the npm script: JSON cannot
+hold the required reason next to the flag. Put the command in a commentable
+file — a small `scripts/check-deps.sh`, or the CI step itself:
 
 ```sh
 vite-dependency-classifier \
-  --runtime-peer some-peer  # required at runtime, never in the bundle by name
+  --runtime-peer some-peer \  # required at runtime, never in the bundle by name
+  --transitive-dev some-util  # listed as a devDependency; only in the bundle via a library
 ```
 
 ## Library
@@ -90,7 +94,8 @@ const { check } = require("vite-dependency-classifier");
 const { ok, missing, extra } = await check();
 ```
 
-Pass `runtimePeers` the same way the CLI takes `--runtime-peer`, with the
+Pass `runtimePeers` the same way the CLI takes `--runtime-peer`, and
+`transitiveDevs` the same way it takes `--transitive-dev`, with the
 reason on the line that adds each name.
 
 `collectBundledPackages` and `classifyPackages` are also exported for callers
@@ -113,7 +118,7 @@ runtime in a user's browser.
 Everything else is a **`devDependency`**: build tooling, linters, test
 runners, type packages, and anything eliminated from the production bundle.
 
-### Three cases that are not obvious
+### Four cases that are not obvious
 
 **A package can be a runtime dependency without being imported by name.** Peer
 dependencies pulled in at runtime by a dependency's own code still belong in
@@ -134,6 +139,14 @@ merely harmless.
 erased at build time and contributes nothing to the bundle, so a package used
 only that way belongs in `devDependencies`.
 
+**A correct `devDependency` can still appear in the bundle as a transitive of
+something that ships.** The app listed it for tests or tooling; a production
+library also depends on it. That is not a reason to move it to
+`dependencies`. The bundle cannot tell that overlap from a real unguarded
+import, so the exemption is explicit — `--transitive-dev` on the CLI, or
+`transitiveDevs` on `check()` — with a stated reason next to that flag or
+call. Do not change the declaration to silence the finding.
+
 ### Why the split matters
 
 It decides which security advisories are urgent. `npm audit --omit=dev` is
@@ -143,7 +156,9 @@ exposure that command will not show you.
 ### Where the policy is enforced
 
 This package _is_ the check. `missing` is a declared `devDependency` present
-in the production bundle. `extra` is a declared `dependency` absent from it.
+in the production bundle, unless it is listed in `transitiveDevs` because
+that presence is only transitive. `extra` is a declared `dependency` absent
+from it.
 
 A bundled package is misclassified only when it is declared on the wrong
 side. Transitive packages that appear in the bundle and are declared nowhere

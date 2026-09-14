@@ -157,6 +157,28 @@ describe("fixture classification", () => {
     ).toEqual({ missing: [], extra: ["unused-pkg"] });
   });
 
+  it("exempts a transitive-only devDependency, and reports it without the allowlist", async () => {
+    // With the allowlist and without it. The second assertion is the one
+    // that fails if transitiveDevs is ignored.
+    const { packages: bundled } = await collect("transitive-dev");
+    const declared = {
+      bundled,
+      dependencies: ["fixture-lib"],
+      devDependencies: ["fixture-leaf"],
+    };
+
+    expect(bundled.has("fixture-leaf")).toBe(true);
+
+    expect(
+      classifyPackages({ ...declared, transitiveDevs: ["fixture-leaf"] }),
+    ).toEqual({ missing: [], extra: [] });
+
+    expect(classifyPackages(declared)).toEqual({
+      missing: ["fixture-leaf"],
+      extra: [],
+    });
+  });
+
   it("exempts a runtime peer, and reports it without the allowlist", async () => {
     // With the allowlist and without it. The second assertion is the one
     // that fails if runtimePeers is ignored.

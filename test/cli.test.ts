@@ -46,6 +46,15 @@ describe("parseCli", () => {
     });
   });
 
+  it("collects repeatable --transitive-dev values", () => {
+    expect(
+      parseCli(["--transitive-dev", "fixture-leaf", "--transitive-dev", "ms"]),
+    ).toMatchObject({
+      kind: "check",
+      options: { transitiveDevs: ["fixture-leaf", "ms"] },
+    });
+  });
+
   it("collects repeatable --runtime-peer values", () => {
     expect(
       parseCli([
@@ -144,6 +153,29 @@ describe("bin", () => {
     expect(withPeer.status).toBe(0);
     expect(withPeer.stdout).toContain("Dependency classification is correct.");
   });
+
+  it("exempts a transitive-only devDependency passed as --transitive-dev", () => {
+    const root = fileURLToPath(
+      new URL("./fixtures/transitive-dev", import.meta.url),
+    );
+
+    const without = spawnCli(root, "--input", "src/main.ts");
+    expect(without.status).toBe(1);
+    expect(without.stderr).toContain("fixture-leaf");
+    expect(without.stderr).toContain("--transitive-dev");
+
+    const withAllowlist = spawnCli(
+      root,
+      "--input",
+      "src/main.ts",
+      "--transitive-dev",
+      "fixture-leaf",
+    );
+    expect(withAllowlist.status).toBe(0);
+    expect(withAllowlist.stdout).toContain(
+      "Dependency classification is correct.",
+    );
+  });
 });
 
 describe("formatCheckResult", () => {
@@ -164,5 +196,25 @@ describe("formatCheckResult", () => {
     expect(stderr).toContain("--runtime-peer");
     expect(stderr).toMatch(/reason next to the flag/i);
     expect(stderr).not.toContain("runtimePeers");
+  });
+
+  const missingResult: CheckResult = {
+    ok: false,
+    missing: ["fixture-leaf"],
+    extra: [],
+    packages: new Set(["fixture-lib", "fixture-leaf"]),
+    chunkCount: 1,
+  };
+
+  it("points missing failures at --transitive-dev, with the reason next to the flag", () => {
+    const { stderr } = formatCheckResult(missingResult, {
+      json: false,
+      quiet: false,
+    });
+    expect(stderr).toContain("fixture-leaf");
+    expect(stderr).toContain("--transitive-dev");
+    expect(stderr).toMatch(/reason next to the flag/i);
+    expect(stderr).toMatch(/do not change the declaration/i);
+    expect(stderr).not.toContain("transitiveDevs");
   });
 });
