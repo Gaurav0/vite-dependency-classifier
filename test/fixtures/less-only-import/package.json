@@ -1,0 +1,8 @@
+{
+  "name": "fixture-less-only-import",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "fixture-less": "*"
+  }
+}
