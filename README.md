@@ -265,3 +265,10 @@ Fixture projects import `fixture-lib`, `fixture-leaf`, `fixture-css`,
 `test/fixtures/packages`, installed at the repo root as `file:`
 devDependencies. Vite's walk-up resolution then yields real
 `/node_modules/<name>/` module ids.
+
+CI (`npm ci`) runs format, lint, typecheck, build, and tests against the
+lockfile. A second job deletes `package-lock.json` and runs `npm install`
+so `devDependency` ranges (including `vite@^8`) resolve to latest matching
+versions, then typechecks and tests. Both jobs run on pull requests,
+pushes to `main`, a Tuesday 06:00 UTC cron, and manual
+`workflow_dispatch`.
