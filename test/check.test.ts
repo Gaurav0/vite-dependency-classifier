@@ -33,6 +33,19 @@ describe("check", () => {
     expect(result.packages.has("fixture-css")).toBe(true);
   });
 
+  it("reports ok for a Sass-only declared dependency", async () => {
+    const result = await check({
+      root: fixture("sass-only-import"),
+      configFile: false,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.missing).toEqual([]);
+    expect(result.extra).toEqual([]);
+    expect(result.unlisted).toEqual([]);
+    expect(result.packages.has("fixture-sass")).toBe(true);
+  });
+
   it("exempts a transitive-only devDependency passed as transitiveDevs", async () => {
     const root = fixture("transitive-dev");
 

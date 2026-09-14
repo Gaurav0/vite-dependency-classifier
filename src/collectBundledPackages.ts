@@ -4,13 +4,16 @@
  * We ask the bundler instead of scanning source so that an `import.meta.env.DEV`
  * guard actually drops the import. See README.md ("Dependencies").
  */
+import { AsyncLocalStorage } from "node:async_hooks";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { build, type Plugin } from "vite";
 import {
   isFirstPartySourceId,
   isVirtualModuleId,
   moduleFilePath,
   packageNameFromModuleId,
+  packageNameFromSassSpecifier,
 } from "./dependencyClassification.ts";
 
 export interface CollectBundledPackagesOptions {
@@ -126,7 +129,9 @@ let queue: Promise<unknown> = Promise.resolve();
  * chunk, not just entries: a dynamic import lives in an async chunk.
  * CSS-only packages live in `chunk.modules` here; Vite's css-post then
  * extracts them to assets and deletes pure-CSS chunks, so
- * `generateBundle` never sees them.
+ * `generateBundle` never sees them. Sass `@use` / `@forward` of a
+ * package is inlined by the preprocessor, so those names come from a
+ * Sass importer instead.
  *
  * `directPackages` walks importers of those same modules so a first-party
  * import (source under `root`) is distinct from a transitive that only
@@ -156,12 +161,75 @@ async function collectOnce({
   const resolvedRoot = path.resolve(root);
   let chunkCount = 0;
 
+  const stylesheetCompile = new AsyncLocalStorage<string>();
+  const sassByStylesheet = new Map<
+    string,
+    { names: Set<string>; direct: Set<string> }
+  >();
+  const sassFallback = { names: new Set<string>(), direct: new Set<string>() };
+
+  function recordSassPackage(url: string, containingFile: string | null): void {
+    const name = packageNameFromSassSpecifier(url);
+    if (name === null) {
+      return;
+    }
+    const stylesheet = stylesheetCompile.getStore();
+    let target = sassFallback;
+    if (stylesheet !== undefined) {
+      const existing = sassByStylesheet.get(stylesheet);
+      if (existing === undefined) {
+        target = { names: new Set(), direct: new Set() };
+        sassByStylesheet.set(stylesheet, target);
+      } else {
+        target = existing;
+      }
+    }
+    target.names.add(name);
+    if (
+      containingFile !== null &&
+      isFirstPartySourceId(containingFile, resolvedRoot)
+    ) {
+      target.direct.add(name);
+    }
+  }
+
+  const sassImporter = {
+    findFileUrl(
+      url: string,
+      context: { containingUrl?: URL | null },
+    ): URL | null {
+      recordSassPackage(
+        url,
+        context.containingUrl === undefined || context.containingUrl === null
+          ? null
+          : fileURLToPath(context.containingUrl),
+      );
+      return null;
+    },
+  };
+
   const collect: Plugin = {
     name: "collect-bundled-packages",
+    config(config) {
+      config.css ??= {};
+      config.css.preprocessorOptions ??= {};
+      prependSassImporter(config.css.preprocessorOptions, sassImporter);
+    },
+    configResolved(config) {
+      wrapCssTransformWithStylesheetContext(config.plugins, (id, run) =>
+        stylesheetCompile.run(moduleFilePath(id), run),
+      );
+    },
     renderChunk(_code, chunk) {
       // `chunk.modules` (not `moduleIds`): Vite keeps empty CSS
       // placeholders here via `moduleSideEffects: 'no-treeshake'`.
       for (const id of Object.keys(chunk.modules)) {
+        const sass = sassByStylesheet.get(moduleFilePath(id));
+        if (sass !== undefined) {
+          for (const name of sass.names) packages.add(name);
+          for (const name of sass.direct) directPackages.add(name);
+        }
+
         const name = packageNameFromModuleId(id);
         if (!name) {
           continue;
@@ -183,6 +251,12 @@ async function collectOnce({
     generateBundle(_options, bundle) {
       for (const output of Object.values(bundle)) {
         if (output.type === "chunk") chunkCount++;
+      }
+      // vite:css transform was not wrapped; Sass loads still count as
+      // bundled because the preprocessor ran during this production build.
+      if (sassByStylesheet.size === 0) {
+        for (const name of sassFallback.names) packages.add(name);
+        for (const name of sassFallback.direct) directPackages.add(name);
       }
     },
   };
@@ -220,4 +294,82 @@ async function collectOnce({
   }
 
   return { packages, directPackages, chunkCount };
+}
+
+function prependSassImporter(
+  preprocessorOptions: Record<string, unknown>,
+  importer: object,
+): void {
+  for (const lang of ["scss", "sass"]) {
+    const current = preprocessorOptions[lang];
+    const base =
+      current !== undefined &&
+      typeof current === "object" &&
+      !Array.isArray(current)
+        ? { ...(current as Record<string, unknown>) }
+        : {};
+    const nextImporters: object[] = [importer];
+    const existing = base["importers"];
+    if (Array.isArray(existing)) {
+      for (const item of existing) {
+        if (typeof item === "object" && item !== null) {
+          nextImporters.push(item as object);
+        }
+      }
+    }
+    preprocessorOptions[lang] = {
+      ...base,
+      importers: nextImporters,
+    };
+  }
+}
+
+function wrapCssTransformWithStylesheetContext(
+  plugins: readonly Plugin[],
+  runForId: (id: string, run: () => unknown) => unknown,
+): void {
+  for (const plugin of plugins) {
+    if (plugin.name !== "vite:css") {
+      continue;
+    }
+    const transform: unknown = plugin.transform;
+    if (typeof transform === "function") {
+      const original = transform as (
+        this: unknown,
+        code: string,
+        id: string,
+        options?: unknown,
+      ) => unknown;
+      plugin.transform = function wrappedCssTransform(
+        this: unknown,
+        code: string,
+        id: string,
+        options?: unknown,
+      ) {
+        return runForId(id, () => original.call(this, code, id, options));
+      } as NonNullable<Plugin["transform"]>;
+      return;
+    }
+    if (
+      typeof transform === "object" &&
+      transform !== null &&
+      "handler" in transform &&
+      typeof transform.handler === "function"
+    ) {
+      const original = transform.handler as (
+        this: unknown,
+        code: string,
+        id: string,
+        options?: unknown,
+      ) => unknown;
+      transform.handler = function wrappedCssTransform(
+        this: unknown,
+        code: string,
+        id: string,
+        options?: unknown,
+      ) {
+        return runForId(id, () => original.call(this, code, id, options));
+      };
+    }
+  }
 }
