@@ -183,6 +183,7 @@ describe("formatCheckResult", () => {
     ok: false,
     missing: [],
     extra: ["runtime-peer-pkg"],
+    unlisted: [],
     packages: new Set(),
     chunkCount: 1,
   };
@@ -202,6 +203,7 @@ describe("formatCheckResult", () => {
     ok: false,
     missing: ["fixture-leaf"],
     extra: [],
+    unlisted: [],
     packages: new Set(["fixture-lib", "fixture-leaf"]),
     chunkCount: 1,
   };

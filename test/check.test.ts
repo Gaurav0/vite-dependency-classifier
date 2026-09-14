@@ -16,6 +16,7 @@ describe("check", () => {
     expect(result.ok).toBe(true);
     expect(result.missing).toEqual([]);
     expect(result.extra).toEqual([]);
+    expect(result.unlisted).toEqual([]);
     expect(result.packages.has("fixture-lib")).toBe(true);
   });
 
@@ -28,6 +29,7 @@ describe("check", () => {
     expect(result.ok).toBe(true);
     expect(result.missing).toEqual([]);
     expect(result.extra).toEqual([]);
+    expect(result.unlisted).toEqual([]);
     expect(result.packages.has("fixture-css")).toBe(true);
   });
 
@@ -40,6 +42,7 @@ describe("check", () => {
     });
     expect(without.ok).toBe(false);
     expect(without.missing).toEqual(["fixture-leaf"]);
+    expect(without.unlisted).toEqual([]);
 
     const withAllowlist = await check({
       root,
@@ -48,6 +51,7 @@ describe("check", () => {
     });
     expect(withAllowlist.ok).toBe(true);
     expect(withAllowlist.missing).toEqual([]);
+    expect(withAllowlist.unlisted).toEqual([]);
   });
 
   it("discovers vite.config.js when configFile is omitted", async () => {
@@ -58,6 +62,50 @@ describe("check", () => {
     expect(result.ok).toBe(true);
     expect(result.missing).toEqual([]);
     expect(result.extra).toEqual([]);
+    expect(result.unlisted).toEqual([]);
     expect(result.packages.has("fixture-lib")).toBe(true);
+  });
+
+  it("reports a first-party import listed in none of the four fields", async () => {
+    const result = await check({
+      root: fixture("unlisted-import"),
+      configFile: false,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.unlisted).toEqual(["fixture-lib"]);
+    expect(result.missing).toEqual([]);
+    expect(result.extra).toEqual([]);
+  });
+
+  it("reports a production import of a devDependency as missing, not unlisted", async () => {
+    const result = await check({
+      root: fixture("undeclared-runtime-import"),
+      configFile: false,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.missing).toEqual(["fixture-lib"]);
+    expect(result.unlisted).toEqual([]);
+  });
+
+  it("treats a first-party import declared only as a peerDependency as listed", async () => {
+    const result = await check({
+      root: fixture("peer-import"),
+      configFile: false,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.unlisted).toEqual([]);
+  });
+
+  it("treats a first-party import declared only as an optionalDependency as listed", async () => {
+    const result = await check({
+      root: fixture("optional-import"),
+      configFile: false,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.unlisted).toEqual([]);
   });
 });

@@ -8,6 +8,7 @@ import path from "node:path";
 import { collectBundledPackages } from "./collectBundledPackages.ts";
 import {
   classifyPackages,
+  classifyUnlisted,
   type Classification,
 } from "./dependencyClassification.ts";
 
@@ -41,13 +42,21 @@ export interface CheckResult extends Classification {
   packages: Set<string>;
   /** Number of output chunks. */
   chunkCount: number;
-  /** True when `missing` and `extra` are both empty. */
+  /**
+   * Direct first-party production imports listed in none of
+   * `dependencies`, `devDependencies`, `peerDependencies`, or
+   * `optionalDependencies`.
+   */
+  unlisted: string[];
+  /** True when `missing`, `extra`, and `unlisted` are all empty. */
   ok: boolean;
 }
 
 interface PackageJson {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
+  peerDependencies?: Record<string, string>;
+  optionalDependencies?: Record<string, string>;
 }
 
 export async function check(options: CheckOptions = {}): Promise<CheckResult> {
@@ -60,16 +69,25 @@ export async function check(options: CheckOptions = {}): Promise<CheckResult> {
     readFileSync(path.join(root, "package.json"), "utf8"),
   ) as PackageJson;
 
-  const { packages, chunkCount } = await collectBundledPackages({
-    root,
-    ...(configFile === undefined ? {} : { configFile }),
-    ...(input === undefined ? {} : { input }),
-  });
+  const { packages, directPackages, chunkCount } = await collectBundledPackages(
+    {
+      root,
+      ...(configFile === undefined ? {} : { configFile }),
+      ...(input === undefined ? {} : { input }),
+    },
+  );
+
+  const dependencies = Object.keys(packageJson.dependencies ?? {});
+  const devDependencies = Object.keys(packageJson.devDependencies ?? {});
+  const peerDependencies = Object.keys(packageJson.peerDependencies ?? {});
+  const optionalDependencies = Object.keys(
+    packageJson.optionalDependencies ?? {},
+  );
 
   const { missing, extra } = classifyPackages({
     bundled: packages,
-    dependencies: Object.keys(packageJson.dependencies ?? {}),
-    devDependencies: Object.keys(packageJson.devDependencies ?? {}),
+    dependencies,
+    devDependencies,
     ...(options.runtimePeers === undefined
       ? {}
       : { runtimePeers: options.runtimePeers }),
@@ -78,11 +96,20 @@ export async function check(options: CheckOptions = {}): Promise<CheckResult> {
       : { transitiveDevs: options.transitiveDevs }),
   });
 
+  const unlisted = classifyUnlisted({
+    direct: directPackages,
+    dependencies,
+    devDependencies,
+    peerDependencies,
+    optionalDependencies,
+  });
+
   return {
     missing,
     extra,
+    unlisted,
     packages,
     chunkCount,
-    ok: missing.length === 0 && extra.length === 0,
+    ok: missing.length === 0 && extra.length === 0 && unlisted.length === 0,
   };
 }
