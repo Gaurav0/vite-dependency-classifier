@@ -15,8 +15,9 @@ import {
  * tree-shaking, async chunks — so stubbing inputs would miss the bugs.
  *
  * Fixtures import fixture-lib / fixture-leaf / fixture-css /
- * fixture-css-theme / fixture-sass / fixture-cjs via `file:` at the repo
- * root so Vite resolves them as `/node_modules/<name>/`.
+ * fixture-css-theme / fixture-sass / fixture-less / fixture-less-leaf /
+ * fixture-cjs via `file:` at the repo root so Vite resolves them as
+ * `/node_modules/<name>/`.
  * Nested store layouts are covered in dependencyClassification.test.ts.
  */
 function fixture(name: string) {
@@ -315,6 +316,102 @@ describe("fixture classification", () => {
         devDependencies: [],
       }),
     ).toEqual([]);
+  });
+
+  it("collects a package imported only via Less @import", async () => {
+    const { packages: bundled, directPackages } =
+      await collect("less-only-import");
+
+    expect(bundled.has("fixture-less")).toBe(true);
+    expect(directPackages.has("fixture-less")).toBe(true);
+
+    expect(
+      classifyPackages({
+        bundled,
+        dependencies: ["fixture-less"],
+        devDependencies: [],
+      }),
+    ).toEqual({ missing: [], extra: [] });
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: ["fixture-less"],
+        devDependencies: [],
+      }),
+    ).toEqual([]);
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: [],
+        devDependencies: [],
+      }),
+    ).toEqual(["fixture-less"]);
+  });
+
+  it("reports a Less-only package declared as a devDependency", async () => {
+    const { packages: bundled } = await collect("less-only-import");
+
+    expect(
+      classifyPackages({
+        bundled,
+        dependencies: [],
+        devDependencies: ["fixture-less"],
+      }),
+    ).toEqual({ missing: ["fixture-less"], extra: [] });
+  });
+
+  it("treats a nested Less @import as bundled, not first-party", async () => {
+    const { packages: bundled, directPackages } =
+      await collect("less-only-import");
+
+    expect(bundled.has("fixture-less-leaf")).toBe(true);
+    expect(directPackages.has("fixture-less-leaf")).toBe(false);
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: ["fixture-less"],
+        devDependencies: [],
+      }),
+    ).toEqual([]);
+  });
+
+  it("reports nothing for a Less import behind an import.meta.env.DEV guard", async () => {
+    const { packages: bundled, directPackages } = await collect(
+      "guarded-less-import",
+    );
+
+    expect(bundled.has("fixture-less")).toBe(false);
+    expect(bundled.has("fixture-less-leaf")).toBe(false);
+    expect(directPackages.has("fixture-less")).toBe(false);
+    expect(directPackages.has("fixture-less-leaf")).toBe(false);
+
+    expect(
+      classifyPackages({
+        bundled,
+        dependencies: [],
+        devDependencies: ["fixture-less"],
+      }),
+    ).toEqual({ missing: [], extra: [] });
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: [],
+        devDependencies: [],
+      }),
+    ).toEqual([]);
+  });
+
+  it("does not treat a relative Less file as a package", async () => {
+    const { directPackages } = await collect("less-only-import");
+
+    expect(directPackages.has("app")).toBe(false);
+    expect(directPackages.has("app.less")).toBe(false);
+    expect(directPackages.has("./app.less")).toBe(false);
+    expect(directPackages.has("fixture-less")).toBe(true);
   });
 
   it("reports nothing for a CSS import behind an import.meta.env.DEV guard", async () => {
