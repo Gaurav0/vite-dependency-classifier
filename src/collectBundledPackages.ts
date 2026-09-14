@@ -12,6 +12,7 @@ import { build, type Plugin } from "vite";
 import {
   cssImportSpecifiers,
   isFirstPartySourceId,
+  isPreprocessorCssId,
   isVirtualModuleId,
   moduleFilePath,
   packageNameFromCssSpecifier,
@@ -237,7 +238,7 @@ async function collectOnce({
   }
 
   function walkFirstPartyWatchedCss(filePath: string): void {
-    if (PREPROCESSOR_FILE.test(filePath)) {
+    if (isPreprocessorCssId(filePath)) {
       return;
     }
     if (!isFirstPartySourceId(filePath, resolvedRoot)) {
@@ -253,11 +254,10 @@ async function collectOnce({
   }
 
   function recordCssAtImportsFromSource(code: string, id: string): void {
-    const filePath = moduleFilePath(id);
-    if (PREPROCESSOR_FILE.test(filePath)) {
+    if (isPreprocessorCssId(id)) {
       return;
     }
-    walkCssAtImports(code, filePath, cssAtImportSeen);
+    walkCssAtImports(code, moduleFilePath(id), cssAtImportSeen);
   }
 
   function walkCssAtImports(
@@ -414,8 +414,6 @@ async function collectOnce({
 
   return { packages, directPackages, chunkCount };
 }
-
-const PREPROCESSOR_FILE = /\.(scss|sass|less|styl|stylus)$/i;
 
 /** Absolute `/…`, protocol-relative `//…`, and `http(s):` / `data:` are not files. */
 function isCssRelativeUrl(spec: string): boolean {

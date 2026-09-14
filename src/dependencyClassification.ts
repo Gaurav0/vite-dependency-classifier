@@ -23,6 +23,20 @@ export function moduleFilePath(id: string): string {
   return query === -1 ? id : id.slice(0, query);
 }
 
+/**
+ * True when this CSS module is Sass / Less / Stylus.
+ *
+ * Standalone `file.scss` matches the path. Vue / Svelte style blocks put
+ * `lang.scss` on the query (`App.vue?vue&type=style&lang.scss`); the
+ * path is still `.vue`. Vite's css filter matches that query, so we
+ * must too, or SCSS `// @import` is parsed as CSS.
+ */
+export function isPreprocessorCssId(id: string): boolean {
+  return PREPROCESSOR_CSS.test(id) || PREPROCESSOR_CSS.test(moduleFilePath(id));
+}
+
+const PREPROCESSOR_CSS = /\.(scss|sass|less|styl|stylus)(?:$|\?)/i;
+
 function isInsideDir(filePath: string, root: string): boolean {
   const resolvedRoot = path.resolve(root);
   const resolvedFile = path.resolve(root, filePath);

@@ -4,6 +4,7 @@ import {
   classifyUnlisted,
   cssImportSpecifiers,
   isFirstPartySourceId,
+  isPreprocessorCssId,
   isVirtualModuleId,
   moduleFilePath,
   packageNameFromCssSpecifier,
@@ -229,6 +230,46 @@ describe("moduleFilePath", () => {
     expect(moduleFilePath("/repo/src/App.vue?vue&type=script")).toBe(
       "/repo/src/App.vue",
     );
+  });
+});
+
+describe("isPreprocessorCssId", () => {
+  it("matches a standalone preprocessor file", () => {
+    expect(isPreprocessorCssId("/repo/src/theme.scss")).toBe(true);
+    expect(isPreprocessorCssId("/repo/src/theme.sass")).toBe(true);
+    expect(isPreprocessorCssId("/repo/src/theme.less")).toBe(true);
+    expect(isPreprocessorCssId("/repo/src/theme.styl")).toBe(true);
+    expect(isPreprocessorCssId("/repo/src/theme.stylus")).toBe(true);
+  });
+
+  it("matches a preprocessor file with a Vite query", () => {
+    expect(isPreprocessorCssId("/repo/src/theme.scss?direct")).toBe(true);
+  });
+
+  it("matches a Vue/Svelte style block whose lang is on the query", () => {
+    expect(
+      isPreprocessorCssId("/repo/src/App.vue?vue&type=style&index=0&lang.scss"),
+    ).toBe(true);
+    expect(
+      isPreprocessorCssId(
+        "/repo/src/App.vue?vue&type=style&index=0&scoped=abc&lang.scss",
+      ),
+    ).toBe(true);
+    expect(
+      isPreprocessorCssId(
+        "/repo/src/Widget.svelte?svelte&type=style&lang.scss",
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects plain CSS, including a Vue/Svelte CSS style block", () => {
+    expect(isPreprocessorCssId("/repo/src/app.css")).toBe(false);
+    expect(
+      isPreprocessorCssId("/repo/src/App.vue?vue&type=style&index=0&lang.css"),
+    ).toBe(false);
+    expect(
+      isPreprocessorCssId("/repo/src/Widget.svelte?svelte&type=style&lang.css"),
+    ).toBe(false);
   });
 });
 
