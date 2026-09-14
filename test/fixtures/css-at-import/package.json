@@ -1,0 +1,8 @@
+{
+  "name": "fixture-css-at-import",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "fixture-css-theme": "*"
+  }
+}

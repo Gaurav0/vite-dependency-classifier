@@ -170,11 +170,22 @@ guard is what makes the `devDependency` classification true rather than
 merely harmless. A DEV-only import listed nowhere is out of scope: it is
 not in the production graph, so it is not `unlisted`.
 
-**A package imported only as CSS still ships.** Vite extracts stylesheets
-into assets and drops the JS placeholders those imports used, so the
-package never appears in a remaining JavaScript chunk. It is still in the
+**A package imported from JavaScript only as a stylesheet still ships.**
+`import "pkg"` whose entry is CSS: Vite extracts the stylesheet into an
+asset and drops the JS placeholders those imports used, so the package
+never appears in a remaining JavaScript chunk. It is still in the
 production output and belongs in `dependencies`. An undeclared CSS-only
 production import is `unlisted`, not silent.
+
+**A package pulled in only through plain CSS `@import` still ships.**
+Vite inlines those files (`postcss-import` / LightningCSS), so they never
+become Vite module ids. They are still in the compiled CSS and belong in
+`dependencies`. An undeclared first-party production `@import` is
+`unlisted`, not silent. Nested `@import`s inside that package ship too,
+but they are not `unlisted` unless first-party source wrote them. A Vite
+alias (`@/theme.css`) that resolves to first-party source is walked the
+same way; we use the path Vite already resolved. A Node `#imports`
+specifier that maps to a package is a first-party import of that package.
 
 **A package pulled in only through Sass `@use` / `@forward` still ships.**
 The preprocessor inlines those files, so they never become Vite module
@@ -253,6 +264,14 @@ npm run build
 ```
 
 Fixture projects import `fixture-lib`, `fixture-leaf`, `fixture-css`,
-`fixture-sass`, and `fixture-cjs` from `test/fixtures/packages`, installed
-at the repo root as `file:` devDependencies. Vite's walk-up resolution
-then yields real `/node_modules/<name>/` module ids.
+`fixture-css-theme`, `fixture-sass`, and `fixture-cjs` from
+`test/fixtures/packages`, installed at the repo root as `file:`
+devDependencies. Vite's walk-up resolution then yields real
+`/node_modules/<name>/` module ids.
+
+CI (`npm ci`) runs format, lint, typecheck, build, and tests against the
+lockfile. A second job deletes `package-lock.json` and runs `npm install`
+so `devDependency` ranges (including `vite@^8`) resolve to latest matching
+versions, then typechecks and tests. Both jobs run on pull requests,
+pushes to `main`, a Tuesday 06:00 UTC cron, and manual
+`workflow_dispatch`.

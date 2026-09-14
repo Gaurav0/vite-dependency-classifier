@@ -24,6 +24,9 @@ and this project adheres to
 - Exported `classifyUnlisted`.
 - `--json` includes `unlisted` and `projectType`.
 - `optionalDependencies` count as declared for `unlisted`.
+- CI runs tests against floating `devDependency` ranges (no lockfile) on
+  pull requests, pushes to `main`, weekly Tuesday cron, and manual
+  `workflow_dispatch`.
 
 ### Fixed
 
@@ -36,6 +39,12 @@ and this project adheres to
   from the production bundle. The preprocessor inlines those files, so
   they never appear as Vite module ids; they are now collected from a
   Sass importer during the production compile.
+- CSS `@import` of a package is no longer treated as absent from the
+  production bundle. Vite inlines those files, so they never appear as
+  module ids; they are collected during the production compile
+  (first-party `@import` plus nested package CSS). A declared CSS-`@import`
+  `dependency` is not `extra`; a shipping `devDependency` is `missing`;
+  an undeclared first-party `@import` is `unlisted`.
 
 ## [0.1.1] - 2026-09-13
 

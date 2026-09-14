@@ -23,6 +23,20 @@ export function moduleFilePath(id: string): string {
   return query === -1 ? id : id.slice(0, query);
 }
 
+/**
+ * True when this CSS module is Sass / Less / Stylus.
+ *
+ * Standalone `file.scss` matches the path. Vue / Svelte style blocks put
+ * `lang.scss` on the query (`App.vue?vue&type=style&lang.scss`); the
+ * path is still `.vue`. Vite's css filter matches that query, so we
+ * must too, or SCSS `// @import` is parsed as CSS.
+ */
+export function isPreprocessorCssId(id: string): boolean {
+  return PREPROCESSOR_CSS.test(id) || PREPROCESSOR_CSS.test(moduleFilePath(id));
+}
+
+const PREPROCESSOR_CSS = /\.(scss|sass|less|styl|stylus)(?:$|\?)/i;
+
 function isInsideDir(filePath: string, root: string): boolean {
   const resolvedRoot = path.resolve(root);
   const resolvedFile = path.resolve(root, filePath);
@@ -98,6 +112,201 @@ export function packageNameFromSassSpecifier(url: string): string | null {
   return packageNameFromSegments(segments[0], segments[1]);
 }
 
+/**
+ * Package name from a CSS `@import` specifier.
+ *
+ * Vite inlines `@import`; those files never become Vite module ids.
+ * `url()`, quotes, `layer()`, and media queries unwrap to the path.
+ * Relative paths, absolute paths, `http(s):`, `data:`,
+ * protocol-relative URLs, Vite `@/` aliases, and `#imports` are not
+ * packages.
+ */
+export function packageNameFromCssSpecifier(spec: string): string | null {
+  const unwrapped = unwrapCssImportSpecifier(spec);
+  if (
+    unwrapped.startsWith(".") ||
+    unwrapped.startsWith("/") ||
+    unwrapped.includes(":")
+  ) {
+    return null;
+  }
+
+  const segments = unwrapped.split("/");
+  return packageNameFromSegments(segments[0], segments[1]);
+}
+
+/**
+ * Package name from a Node `#imports` specifier using this project's
+ * package.json `imports` map. Relative targets are first-party files
+ * (walked via addWatchFile), not packages.
+ */
+export function packageNameFromHashImport(
+  spec: string,
+  imports: Record<string, unknown> | undefined,
+): string | null {
+  if (!spec.startsWith("#") || imports === undefined) {
+    return null;
+  }
+  const mapped = importMapTarget(imports[spec]);
+  if (mapped === null) {
+    return null;
+  }
+  return packageNameFromCssSpecifier(mapped);
+}
+
+function importMapTarget(value: unknown): string | null {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    const rec = value as Record<string, unknown>;
+    return importMapTarget(
+      rec["default"] ?? rec["import"] ?? rec["browser"] ?? rec["require"],
+    );
+  }
+  return null;
+}
+
+/**
+ * Specifiers from CSS `@import` rules, in source order.
+ *
+ * Handles `"pkg"`, `'pkg'`, `url("pkg")`, `url('pkg')`, `url(pkg)`,
+ * and trailing `layer()` / media queries. Skips block comments and
+ * quoted strings, including comments between `@import` and the
+ * specifier. Does not interpret the specifier;
+ * `packageNameFromCssSpecifier` decides if it is a package.
+ */
+export function cssImportSpecifiers(code: string): string[] {
+  const specifiers: string[] = [];
+  let i = 0;
+  while (i < code.length) {
+    if (code.startsWith("/*", i)) {
+      const end = code.indexOf("*/", i + 2);
+      i = end === -1 ? code.length : end + 2;
+      continue;
+    }
+    const ch = code[i];
+    if (ch === '"' || ch === "'") {
+      i = skipCssString(code, i);
+      continue;
+    }
+    if (
+      (i === 0 || !isCssIdentContinue(code[i - 1])) &&
+      code.slice(i, i + 7).toLowerCase() === "@import"
+    ) {
+      const parsed = readCssImportSpecifier(
+        code,
+        skipCssWhitespaceAndComments(code, i + 7),
+      );
+      if (parsed !== null && parsed.spec !== "") {
+        specifiers.push(parsed.spec);
+        i = parsed.end;
+        continue;
+      }
+    }
+    i += 1;
+  }
+  return specifiers;
+}
+
+function skipCssWhitespaceAndComments(code: string, start: number): number {
+  let i = start;
+  while (i < code.length) {
+    const ch = code[i];
+    if (
+      ch === " " ||
+      ch === "\t" ||
+      ch === "\n" ||
+      ch === "\r" ||
+      ch === "\f"
+    ) {
+      i += 1;
+      continue;
+    }
+    if (code.startsWith("/*", i)) {
+      const end = code.indexOf("*/", i + 2);
+      i = end === -1 ? code.length : end + 2;
+      continue;
+    }
+    break;
+  }
+  return i;
+}
+
+function readCssImportSpecifier(
+  code: string,
+  start: number,
+): { spec: string; end: number } | null {
+  let i = start;
+  let wrappedInUrl = false;
+  if (code.slice(i, i + 4).toLowerCase() === "url(") {
+    wrappedInUrl = true;
+    i = skipCssWhitespaceAndComments(code, i + 4);
+  }
+  if (i >= code.length) {
+    return null;
+  }
+
+  const quote = code[i];
+  let spec: string;
+  if (quote === '"' || quote === "'") {
+    const end = skipCssString(code, i);
+    if (end <= i + 1 || code[end - 1] !== quote) {
+      return null;
+    }
+    spec = code.slice(i + 1, end - 1);
+    i = end;
+  } else {
+    const bare = /^[^"')\s;]+/.exec(code.slice(i));
+    if (bare === null) {
+      return null;
+    }
+    spec = bare[0];
+    i += spec.length;
+  }
+
+  if (wrappedInUrl) {
+    i = skipCssWhitespaceAndComments(code, i);
+    if (code[i] === ")") {
+      i += 1;
+    }
+  }
+  return { spec, end: i };
+}
+
+function skipCssString(code: string, start: number): number {
+  const quote = code[start];
+  let i = start + 1;
+  while (i < code.length) {
+    if (code[i] === "\\") {
+      i += 2;
+      continue;
+    }
+    if (code[i] === quote) {
+      return i + 1;
+    }
+    i += 1;
+  }
+  return code.length;
+}
+
+function isCssIdentContinue(ch: string | undefined): boolean {
+  return ch !== undefined && /[A-Za-z0-9_-]/.test(ch);
+}
+
+function unwrapCssImportSpecifier(spec: string): string {
+  const trimmed = spec.trim();
+  const url = /^url\(\s*(?:"([^"]*)"|'([^']*)'|([^)]*?))\s*\)$/i.exec(trimmed);
+  if (url) {
+    return (url[1] ?? url[2] ?? url[3] ?? "").trim();
+  }
+  const quoted = /^(?:"([^"]*)"|'([^']*)')$/.exec(trimmed);
+  if (quoted) {
+    return (quoted[1] ?? quoted[2] ?? "").trim();
+  }
+  return trimmed;
+}
+
 function packageNameFromSegments(
   first: string | undefined,
   second: string | undefined,
@@ -111,8 +320,17 @@ function packageNameFromSegments(
     return null;
   }
 
+  // Node `#imports` / Vite `#` alias. Not an npm name.
+  if (first.startsWith("#")) {
+    return null;
+  }
+
   if (first.startsWith("@")) {
-    return second ? `${first}/${second}` : null;
+    // `@/` is a Vite alias prefix (`@/styles/x.css`), not scope `@`.
+    if (!second || first.length === 1) {
+      return null;
+    }
+    return `${first}/${second}`;
   }
 
   return first;

@@ -46,6 +46,43 @@ describe("check", () => {
     expect(result.packages.has("fixture-sass")).toBe(true);
   });
 
+  it("reports ok for a CSS @import declared dependency", async () => {
+    const result = await check({
+      root: fixture("css-at-import"),
+      configFile: false,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.missing).toEqual([]);
+    expect(result.extra).toEqual([]);
+    expect(result.unlisted).toEqual([]);
+    expect(result.packages.has("fixture-css-theme")).toBe(true);
+    expect(result.packages.has("fixture-css")).toBe(true);
+  });
+
+  it("reports ok for a Vite-aliased CSS @import declared dependency", async () => {
+    const result = await check({
+      root: fixture("css-at-import-alias"),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.unlisted).toEqual([]);
+    expect(result.packages.has("fixture-css-theme")).toBe(true);
+    expect(result.packages.has("fixture-css")).toBe(true);
+  });
+
+  it("reports ok for a #imports CSS @import declared dependency", async () => {
+    const result = await check({
+      root: fixture("css-at-import-hash"),
+      configFile: false,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.unlisted).toEqual([]);
+    expect(result.packages.has("fixture-css-theme")).toBe(true);
+    expect(result.packages.has("fixture-css")).toBe(true);
+  });
+
   it("exempts a transitive-only devDependency passed as transitiveDevs", async () => {
     const root = fixture("transitive-dev");
 

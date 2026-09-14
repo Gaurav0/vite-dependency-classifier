@@ -1,0 +1,11 @@
+{
+  "name": "fixture-css-at-import-hash",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#theme": "fixture-css-theme/index.css"
+  },
+  "dependencies": {
+    "fixture-css-theme": "*"
+  }
+}

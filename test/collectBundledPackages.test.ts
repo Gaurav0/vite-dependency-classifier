@@ -1,6 +1,10 @@
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { collectBundledPackages } from "../src/collectBundledPackages.ts";
+import {
+  collectBundledPackages,
+  walkCssAtImports,
+  wrapCssTransformWithStylesheetContext,
+} from "../src/collectBundledPackages.ts";
 import {
   classifyPackages,
   classifyUnlisted,
@@ -10,9 +14,9 @@ import {
  * Real production builds against ./fixtures. We need the bundler for this —
  * tree-shaking, async chunks — so stubbing inputs would miss the bugs.
  *
- * Fixtures import fixture-lib / fixture-leaf / fixture-css / fixture-sass /
- * fixture-cjs via `file:` at the repo root so Vite resolves them as
- * `/node_modules/<name>/`.
+ * Fixtures import fixture-lib / fixture-leaf / fixture-css /
+ * fixture-css-theme / fixture-sass / fixture-cjs via `file:` at the repo
+ * root so Vite resolves them as `/node_modules/<name>/`.
  * Nested store layouts are covered in dependencyClassification.test.ts.
  */
 function fixture(name: string) {
@@ -339,6 +343,158 @@ describe("fixture classification", () => {
     ).toEqual([]);
   });
 
+  it("collects a package imported only via CSS @import", async () => {
+    const { packages: bundled, directPackages } =
+      await collect("css-at-import");
+
+    expect(bundled.has("fixture-css-theme")).toBe(true);
+    expect(bundled.has("fixture-css")).toBe(true);
+    expect(directPackages.has("fixture-css-theme")).toBe(true);
+    expect(directPackages.has("fixture-css")).toBe(false);
+
+    expect(
+      classifyPackages({
+        bundled,
+        dependencies: ["fixture-css-theme"],
+        devDependencies: [],
+      }),
+    ).toEqual({ missing: [], extra: [] });
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: ["fixture-css-theme"],
+        devDependencies: [],
+      }),
+    ).toEqual([]);
+  });
+
+  it("does not treat a bare relative CSS @import as a package", async () => {
+    const { packages: bundled, directPackages } =
+      await collect("css-at-import");
+
+    expect(directPackages.has("local.css")).toBe(false);
+    expect(directPackages.has("local")).toBe(false);
+    expect(directPackages.has("components")).toBe(false);
+    expect(bundled.has("local.css")).toBe(false);
+    expect(bundled.has("components")).toBe(false);
+    expect(directPackages.has("fixture-css-theme")).toBe(true);
+  });
+
+  it("treats a nested CSS @import as bundled, not first-party", async () => {
+    const { packages: bundled, directPackages } =
+      await collect("css-at-import");
+
+    expect(bundled.has("fixture-css")).toBe(true);
+    expect(directPackages.has("fixture-css")).toBe(false);
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: [],
+        devDependencies: [],
+      }),
+    ).toEqual(["fixture-css-theme"]);
+
+    expect(
+      classifyPackages({
+        bundled,
+        dependencies: ["fixture-css-theme", "fixture-css"],
+        devDependencies: [],
+      }),
+    ).toEqual({ missing: [], extra: [] });
+  });
+
+  it("reports a CSS @import package declared as a devDependency", async () => {
+    const { packages: bundled } = await collect("css-at-import");
+
+    expect(
+      classifyPackages({
+        bundled,
+        dependencies: [],
+        devDependencies: ["fixture-css-theme"],
+      }),
+    ).toEqual({ missing: ["fixture-css-theme"], extra: [] });
+  });
+
+  it("treats an undeclared first-party CSS @import as unlisted", async () => {
+    const { directPackages } = await collect("css-at-import");
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: [],
+        devDependencies: [],
+      }),
+    ).toEqual(["fixture-css-theme"]);
+  });
+
+  it("walks a Vite-aliased first-party CSS @import", async () => {
+    const { packages: bundled, directPackages } = await collectBundledPackages({
+      root: fixture("css-at-import-alias"),
+    });
+
+    expect(directPackages.has("fixture-css-theme")).toBe(true);
+    expect(directPackages.has("fixture-css")).toBe(false);
+    expect(bundled.has("fixture-css-theme")).toBe(true);
+    expect(bundled.has("fixture-css")).toBe(true);
+    expect(directPackages.has("@")).toBe(false);
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: [],
+        devDependencies: [],
+      }),
+    ).toEqual(["fixture-css-theme"]);
+  });
+
+  it("treats a #imports CSS @import that maps to a package as direct", async () => {
+    const { packages: bundled, directPackages } =
+      await collect("css-at-import-hash");
+
+    expect(directPackages.has("fixture-css-theme")).toBe(true);
+    expect(directPackages.has("fixture-css")).toBe(false);
+    expect(bundled.has("fixture-css-theme")).toBe(true);
+    expect(bundled.has("fixture-css")).toBe(true);
+    expect(directPackages.has("#theme")).toBe(false);
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: [],
+        devDependencies: [],
+      }),
+    ).toEqual(["fixture-css-theme"]);
+  });
+
+  it("reports nothing for a CSS @import behind an import.meta.env.DEV guard", async () => {
+    const { packages: bundled, directPackages } = await collect(
+      "guarded-css-at-import",
+    );
+
+    expect(bundled.has("fixture-css-theme")).toBe(false);
+    expect(bundled.has("fixture-css")).toBe(false);
+    expect(directPackages.has("fixture-css-theme")).toBe(false);
+    expect(directPackages.has("fixture-css")).toBe(false);
+
+    expect(
+      classifyPackages({
+        bundled,
+        dependencies: [],
+        devDependencies: ["fixture-css-theme"],
+      }),
+    ).toEqual({ missing: [], extra: [] });
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: [],
+        devDependencies: [],
+      }),
+    ).toEqual([]);
+  });
+
   it("reports a declared dependency that never reaches the bundle", async () => {
     const { packages: bundled, directPackages } = await collect(
       "unused-declared-dep",
@@ -509,5 +665,96 @@ describe("fixture classification", () => {
         devDependencies: [],
       }),
     ).toEqual([]);
+  });
+});
+
+describe("walkCssAtImports", () => {
+  it("walks two CSS modules that share a path and differ by query", () => {
+    const seen = new Set<string>();
+    const names: string[] = [];
+    const file = "/repo/src/App.vue";
+    const record = (name: string): void => {
+      names.push(name);
+    };
+
+    walkCssAtImports(
+      '@import "pkg-a";',
+      file,
+      seen,
+      record,
+      `${file}?vue&type=style&index=0&lang.css`,
+    );
+    walkCssAtImports(
+      '@import "pkg-b";',
+      file,
+      seen,
+      record,
+      `${file}?vue&type=style&index=1&lang.css`,
+    );
+
+    expect(names).toEqual(["pkg-a", "pkg-b"]);
+  });
+
+  it("does not re-walk the same module id", () => {
+    const seen = new Set<string>();
+    const names: string[] = [];
+    const record = (name: string): void => {
+      names.push(name);
+    };
+
+    walkCssAtImports('@import "pkg-a";', "/repo/a.css", seen, record);
+    walkCssAtImports('@import "pkg-b";', "/repo/a.css", seen, record);
+
+    expect(names).toEqual(["pkg-a"]);
+  });
+
+  it("records a #imports specifier that maps to a package", () => {
+    const names: string[] = [];
+    walkCssAtImports(
+      '@import "#theme";',
+      "/repo/src/app.css",
+      new Set(),
+      (name) => names.push(name),
+      "/repo/src/app.css",
+      (spec) => (spec === "#theme" ? "fixture-css-theme" : null),
+    );
+    expect(names).toEqual(["fixture-css-theme"]);
+  });
+});
+
+describe("wrapCssTransformWithStylesheetContext", () => {
+  const runForId = (): undefined => undefined;
+
+  it("returns false when vite:css is missing", () => {
+    expect(wrapCssTransformWithStylesheetContext([], runForId)).toBe(false);
+    expect(
+      wrapCssTransformWithStylesheetContext(
+        [{ name: "other", transform: (): undefined => undefined }],
+        runForId,
+      ),
+    ).toBe(false);
+  });
+
+  it("returns true for a function transform", () => {
+    expect(
+      wrapCssTransformWithStylesheetContext(
+        [{ name: "vite:css", transform: (): undefined => undefined }],
+        runForId,
+      ),
+    ).toBe(true);
+  });
+
+  it("returns true for an object handler transform", () => {
+    expect(
+      wrapCssTransformWithStylesheetContext(
+        [
+          {
+            name: "vite:css",
+            transform: { handler: (): undefined => undefined },
+          },
+        ],
+        runForId,
+      ),
+    ).toBe(true);
   });
 });

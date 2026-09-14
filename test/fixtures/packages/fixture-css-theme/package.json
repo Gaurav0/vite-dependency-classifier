@@ -1,0 +1,14 @@
+{
+  "name": "fixture-css-theme",
+  "private": true,
+  "type": "module",
+  "sideEffects": ["*.css"],
+  "exports": {
+    ".": "./index.css",
+    "./index.css": "./index.css"
+  },
+  "style": "./index.css",
+  "dependencies": {
+    "fixture-css": "*"
+  }
+}
