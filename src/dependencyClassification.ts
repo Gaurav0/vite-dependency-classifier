@@ -103,8 +103,9 @@ export function packageNameFromSassSpecifier(url: string): string | null {
  *
  * Vite inlines `@import`; those files never become Vite module ids.
  * `url()`, quotes, `layer()`, and media queries unwrap to the path.
- * Relative paths, absolute paths, `http(s):`, `data:`, and
- * protocol-relative URLs are not packages.
+ * Relative paths, absolute paths, `http(s):`, `data:`,
+ * protocol-relative URLs, Vite `@/` aliases, and `#imports` are not
+ * packages.
  */
 export function packageNameFromCssSpecifier(spec: string): string | null {
   const unwrapped = unwrapCssImportSpecifier(spec);
@@ -167,8 +168,17 @@ function packageNameFromSegments(
     return null;
   }
 
+  // Node `#imports` / Vite `#` alias. Not an npm name.
+  if (first.startsWith("#")) {
+    return null;
+  }
+
   if (first.startsWith("@")) {
-    return second ? `${first}/${second}` : null;
+    // `@/` is a Vite alias prefix (`@/styles/x.css`), not scope `@`.
+    if (!second || first.length === 1) {
+      return null;
+    }
+    return `${first}/${second}`;
   }
 
   return first;

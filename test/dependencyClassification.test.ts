@@ -112,6 +112,11 @@ describe("packageNameFromSassSpecifier", () => {
     expect(packageNameFromSassSpecifier("sass:math")).toBeNull();
     expect(packageNameFromSassSpecifier("file:///tmp/x.scss")).toBeNull();
   });
+
+  it("returns null for a Vite @/ alias", () => {
+    expect(packageNameFromSassSpecifier("@/theme")).toBeNull();
+    expect(packageNameFromSassSpecifier("@/styles/colors")).toBeNull();
+  });
 });
 
 describe("packageNameFromCssSpecifier", () => {
@@ -149,6 +154,15 @@ describe("packageNameFromCssSpecifier", () => {
       packageNameFromCssSpecifier("data:text/css,body{color:red}"),
     ).toBeNull();
     expect(packageNameFromCssSpecifier("//example.com/x.css")).toBeNull();
+  });
+
+  it("returns null for a Vite @/ alias", () => {
+    expect(packageNameFromCssSpecifier("@/theme.css")).toBeNull();
+    expect(packageNameFromCssSpecifier("@/styles/theme.css")).toBeNull();
+  });
+
+  it("returns null for a #imports specifier", () => {
+    expect(packageNameFromCssSpecifier("#internal/x.css")).toBeNull();
   });
 });
 
