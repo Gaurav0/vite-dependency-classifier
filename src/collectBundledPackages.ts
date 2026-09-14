@@ -4,8 +4,14 @@
  * We ask the bundler instead of scanning source so that an `import.meta.env.DEV`
  * guard actually drops the import. See README.md ("Dependencies").
  */
+import path from "node:path";
 import { build, type Plugin } from "vite";
-import { packageNameFromModuleId } from "./dependencyClassification.ts";
+import {
+  isFirstPartySourceId,
+  isVirtualModuleId,
+  moduleFilePath,
+  packageNameFromModuleId,
+} from "./dependencyClassification.ts";
 
 export interface CollectBundledPackagesOptions {
   /** Project root to build. */
@@ -24,9 +30,89 @@ export interface BundleContents {
   /** Package names present anywhere in the output. */
   packages: Set<string>;
   /**
+   * Package names imported by surviving first-party modules (source under
+   * the project root). Virtual wrappers and same-package proxies are hops.
+   */
+  directPackages: Set<string>;
+  /**
    * Output chunk count. Tests use this to confirm a fixture still code-splits.
    */
   chunkCount: number;
+}
+
+/**
+ * Walk static and dynamic importers toward first-party source.
+ *
+ * Hops: virtuals (`\0…`, `virtual:`), same-package wrappers (CJS proxies),
+ * and node_modules paths that are not a package (store / optimizer dirs).
+ * Another package, or source outside `root`, stops that branch.
+ */
+function importedByFirstParty(
+  getModuleInfo: (id: string) => {
+    importers: readonly string[];
+    dynamicImporters: readonly string[];
+  } | null,
+  startId: string,
+  root: string,
+  cache: Map<string, boolean>,
+): boolean {
+  const cached = cache.get(startId);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const startPkg = packageNameFromModuleId(startId);
+  const seen = new Set<string>([startId]);
+  const stack = [startId];
+
+  function walk(): boolean {
+    while (stack.length > 0) {
+      const id = stack.pop();
+      if (id === undefined) {
+        break;
+      }
+
+      const info = getModuleInfo(id);
+      if (!info) {
+        continue;
+      }
+
+      for (const importer of [...info.importers, ...info.dynamicImporters]) {
+        if (seen.has(importer)) {
+          continue;
+        }
+        seen.add(importer);
+
+        if (isVirtualModuleId(importer)) {
+          stack.push(importer);
+          continue;
+        }
+
+        const importerPkg = packageNameFromModuleId(importer);
+        if (importerPkg !== null) {
+          if (importerPkg === startPkg) {
+            stack.push(importer);
+          }
+          continue;
+        }
+
+        if (moduleFilePath(importer).includes("/node_modules/")) {
+          stack.push(importer);
+          continue;
+        }
+
+        if (isFirstPartySourceId(importer, root)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  const result = walk();
+  cache.set(startId, result);
+  return result;
 }
 
 /** Tail of the build queue; see `collectBundledPackages`. */
@@ -41,6 +127,10 @@ let queue: Promise<unknown> = Promise.resolve();
  * CSS-only packages live in `chunk.modules` here; Vite's css-post then
  * extracts them to assets and deletes pure-CSS chunks, so
  * `generateBundle` never sees them.
+ *
+ * `directPackages` walks importers of those same modules so a first-party
+ * import (source under `root`) is distinct from a transitive that only
+ * appears because a library pulled it in.
  */
 export function collectBundledPackages(
   options: CollectBundledPackagesOptions,
@@ -61,6 +151,9 @@ async function collectOnce({
   input,
 }: CollectBundledPackagesOptions): Promise<BundleContents> {
   const packages = new Set<string>();
+  const directPackages = new Set<string>();
+  const firstPartyCache = new Map<string, boolean>();
+  const resolvedRoot = path.resolve(root);
   let chunkCount = 0;
 
   const collect: Plugin = {
@@ -70,7 +163,21 @@ async function collectOnce({
       // placeholders here via `moduleSideEffects: 'no-treeshake'`.
       for (const id of Object.keys(chunk.modules)) {
         const name = packageNameFromModuleId(id);
-        if (name) packages.add(name);
+        if (!name) {
+          continue;
+        }
+        packages.add(name);
+        if (
+          !directPackages.has(name) &&
+          importedByFirstParty(
+            this.getModuleInfo.bind(this),
+            id,
+            resolvedRoot,
+            firstPartyCache,
+          )
+        ) {
+          directPackages.add(name);
+        }
       }
     },
     generateBundle(_options, bundle) {
@@ -112,5 +219,5 @@ async function collectOnce({
     }
   }
 
-  return { packages, chunkCount };
+  return { packages, directPackages, chunkCount };
 }

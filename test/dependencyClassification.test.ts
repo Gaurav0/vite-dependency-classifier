@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   classifyPackages,
+  classifyUnlisted,
+  isFirstPartySourceId,
+  isVirtualModuleId,
+  moduleFilePath,
   packageNameFromModuleId,
 } from "../src/dependencyClassification.ts";
 
@@ -65,6 +69,74 @@ describe("packageNameFromModuleId", () => {
 
   it("returns null for a virtual module with no path separators", () => {
     expect(packageNameFromModuleId("\0commonjsHelpers.js")).toBeNull();
+  });
+
+  it("returns null for an unresolved virtual: id", () => {
+    expect(packageNameFromModuleId("virtual:my-plugin")).toBeNull();
+  });
+
+  it("reads a package name from a CommonJS proxy query", () => {
+    expect(
+      packageNameFromModuleId(
+        "/repo/node_modules/fixture-cjs/index.js?commonjs-proxy",
+      ),
+    ).toBe("fixture-cjs");
+  });
+});
+
+describe("isVirtualModuleId", () => {
+  it("treats a NUL prefix and virtual: as virtual", () => {
+    expect(isVirtualModuleId("\0vite/preload-helper")).toBe(true);
+    expect(isVirtualModuleId("virtual:my-plugin")).toBe(true);
+    expect(isVirtualModuleId("/repo/src/main.ts")).toBe(false);
+  });
+});
+
+describe("moduleFilePath", () => {
+  it("strips a query string", () => {
+    expect(moduleFilePath("/repo/src/App.vue?vue&type=script")).toBe(
+      "/repo/src/App.vue",
+    );
+  });
+});
+
+describe("isFirstPartySourceId", () => {
+  const root = "/repo";
+
+  it("accepts source under the project root", () => {
+    expect(isFirstPartySourceId("/repo/src/main.ts", root)).toBe(true);
+  });
+
+  it("accepts a query suffix on first-party source", () => {
+    expect(
+      isFirstPartySourceId("/repo/src/App.vue?vue&type=script", root),
+    ).toBe(true);
+  });
+
+  it("rejects a package under node_modules", () => {
+    expect(
+      isFirstPartySourceId("/repo/node_modules/react/index.js", root),
+    ).toBe(false);
+  });
+
+  it("rejects a store path that is not a package name", () => {
+    expect(
+      isFirstPartySourceId(
+        "/repo/node_modules/.store/react@19.2.5/index.js",
+        root,
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects source outside the project root", () => {
+    expect(
+      isFirstPartySourceId("/repo-ui/packages/ui/src/index.ts", root),
+    ).toBe(false);
+  });
+
+  it("rejects virtual modules", () => {
+    expect(isFirstPartySourceId("\0vite/preload-helper", root)).toBe(false);
+    expect(isFirstPartySourceId("virtual:my-plugin", root)).toBe(false);
   });
 });
 
@@ -176,5 +248,99 @@ describe("classifyPackages", () => {
 
   it("returns empty lists for empty input", () => {
     expect(classifyPackages(base)).toEqual({ missing: [], extra: [] });
+  });
+});
+
+describe("classifyUnlisted", () => {
+  const base = {
+    direct: [],
+    dependencies: [],
+    devDependencies: [],
+  };
+
+  it("reports a direct import listed in none of the declared fields", () => {
+    expect(
+      classifyUnlisted({
+        ...base,
+        direct: ["fixture-lib"],
+      }),
+    ).toEqual(["fixture-lib"]);
+  });
+
+  it("ignores a direct import listed in dependencies", () => {
+    expect(
+      classifyUnlisted({
+        ...base,
+        direct: ["fixture-lib"],
+        dependencies: ["fixture-lib"],
+      }),
+    ).toEqual([]);
+  });
+
+  it("ignores a direct import listed in devDependencies", () => {
+    // Wrong field is `missing`, not unlisted.
+    expect(
+      classifyUnlisted({
+        ...base,
+        direct: ["fixture-lib"],
+        devDependencies: ["fixture-lib"],
+      }),
+    ).toEqual([]);
+  });
+
+  it("ignores a direct import listed in peerDependencies", () => {
+    // Library callers pass peerDependencies. Apps omit the field so a
+    // peer-only import is unlisted — see check() / --library.
+    expect(
+      classifyUnlisted({
+        ...base,
+        direct: ["fixture-lib"],
+        peerDependencies: ["fixture-lib"],
+      }),
+    ).toEqual([]);
+  });
+
+  it("ignores a direct import listed in optionalDependencies", () => {
+    expect(
+      classifyUnlisted({
+        ...base,
+        direct: ["fixture-lib"],
+        optionalDependencies: ["fixture-lib"],
+      }),
+    ).toEqual([]);
+  });
+
+  it("ignores a direct import listed in both dependencies and devDependencies", () => {
+    expect(
+      classifyUnlisted({
+        ...base,
+        direct: ["vite"],
+        dependencies: ["vite"],
+        devDependencies: ["vite"],
+      }),
+    ).toEqual([]);
+  });
+
+  it("returns sorted unique names for two undeclared direct imports", () => {
+    expect(
+      classifyUnlisted({
+        ...base,
+        direct: ["zod", "fixture-lib", "zod"],
+      }),
+    ).toEqual(["fixture-lib", "zod"]);
+  });
+
+  it("returns empty when nothing is direct", () => {
+    // Transitives live in `packages`, not `direct`.
+    expect(classifyUnlisted(base)).toEqual([]);
+  });
+
+  it("ignores a declared name that is not direct", () => {
+    expect(
+      classifyUnlisted({
+        ...base,
+        dependencies: ["unused-pkg"],
+      }),
+    ).toEqual([]);
   });
 });

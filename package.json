@@ -1,7 +1,7 @@
 {
   "name": "vite-dependency-classifier",
-  "version": "0.1.1",
-  "description": "Check that a Vite project's dependencies/devDependencies split matches what the production build actually contains.",
+  "version": "0.2.0",
+  "description": "Check that a Vite project's dependencies/devDependencies split matches what the production build actually contains, and that production source does not import an undeclared package.",
   "keywords": [
     "vite",
     "dependencies",
@@ -71,6 +71,7 @@
     "eslint": "^10.9.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.6",
+    "fixture-cjs": "file:test/fixtures/packages/fixture-cjs",
     "fixture-css": "file:test/fixtures/packages/fixture-css",
     "fixture-leaf": "file:test/fixtures/packages/fixture-leaf",
     "fixture-lib": "file:test/fixtures/packages/fixture-lib",

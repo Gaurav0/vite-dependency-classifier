@@ -5,7 +5,54 @@
  * See README.md ("Dependencies") for the policy.
  */
 
+import path from "node:path";
+
 const NODE_MODULES = "/node_modules/";
+
+/**
+ * Rollup/Vite virtual: NUL prefix, or the unresolved `virtual:` form some
+ * plugins leave on importers.
+ */
+export function isVirtualModuleId(id: string): boolean {
+  return id.startsWith("\0") || id.startsWith("virtual:");
+}
+
+/** Path part of a module id, without `?query`. */
+export function moduleFilePath(id: string): string {
+  const query = id.indexOf("?");
+  return query === -1 ? id : id.slice(0, query);
+}
+
+function isInsideDir(filePath: string, root: string): boolean {
+  const resolvedRoot = path.resolve(root);
+  const resolvedFile = path.resolve(root, filePath);
+  const relative = path.relative(resolvedRoot, resolvedFile);
+  return (
+    relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative)
+  );
+}
+
+/**
+ * True when `id` is this project's source: under `root`, not a package,
+ * not a virtual, not a node_modules store path.
+ *
+ * A Vite alias to another package's files lives outside `root`, so it is
+ * not first-party here. That package's dependencies are not `unlisted` in
+ * this project.
+ */
+export function isFirstPartySourceId(id: string, root: string): boolean {
+  if (isVirtualModuleId(id)) {
+    return false;
+  }
+  if (packageNameFromModuleId(id) !== null) {
+    return false;
+  }
+  const filePath = moduleFilePath(id);
+  if (filePath.includes(NODE_MODULES)) {
+    return false;
+  }
+  return isInsideDir(filePath, root);
+}
 
 /**
  * Package name from a Rollup/Rolldown module id, or null for first-party
@@ -17,7 +64,7 @@ const NODE_MODULES = "/node_modules/";
 export function packageNameFromModuleId(id: string): string | null {
   // Virtual modules get a NUL prefix from Rollup. Some (\0commonjsHelpers.js)
   // have no slashes, so catch them before the path walk.
-  if (id.startsWith("\0")) {
+  if (isVirtualModuleId(id)) {
     return null;
   }
 
@@ -80,8 +127,10 @@ export interface Classification {
  * packages (scheduler via react-dom, etc.) show up in the bundle but
  * aren't declared, and that's fine.
  *
- * A phantom — imported in src/ but listed in neither field — looks
- * identical to a transitive dep here. That's a different check.
+ * An unlisted package — imported by first-party production source but
+ * listed in none of the four package.json fields — looks identical to
+ * a transitive dep here. Use `classifyUnlisted` with the first-party
+ * direct set, not this function.
  */
 export function classifyPackages({
   bundled,
@@ -110,4 +159,43 @@ export function classifyPackages({
     .sort();
 
   return { missing, extra };
+}
+
+export interface ClassifyUnlistedInput {
+  /** Package names imported by surviving first-party production modules. */
+  direct: Iterable<string>;
+  /** Names from package.json `dependencies`. */
+  dependencies: Iterable<string>;
+  /** Names from package.json `devDependencies`. */
+  devDependencies: Iterable<string>;
+  /** Names from package.json `peerDependencies`. Pass for a library. */
+  peerDependencies?: Iterable<string>;
+  /** Names from package.json `optionalDependencies`. */
+  optionalDependencies?: Iterable<string>;
+}
+
+/**
+ * Direct first-party production imports that are listed in none of the
+ * fields passed in. An application omits `peerDependencies` so a
+ * peer-only import is unlisted. A library passes them so a peer counts
+ * as declared.
+ *
+ * `missing` / `extra` stay in `classifyPackages`. A direct import that
+ * is already a `devDependency` is declared, so it is not unlisted.
+ */
+export function classifyUnlisted({
+  direct,
+  dependencies,
+  devDependencies,
+  peerDependencies = [],
+  optionalDependencies = [],
+}: ClassifyUnlistedInput): string[] {
+  const declared = new Set([
+    ...dependencies,
+    ...devDependencies,
+    ...peerDependencies,
+    ...optionalDependencies,
+  ]);
+
+  return [...new Set(direct)].filter((name) => !declared.has(name)).sort();
 }
