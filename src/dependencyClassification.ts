@@ -140,13 +140,12 @@ export function packageNameFromCssSpecifier(spec: string): string | null {
  *
  * Handles `"pkg"`, `'pkg'`, `url("pkg")`, `url('pkg')`, `url(pkg)`,
  * and trailing `layer()` / media queries. Skips block comments and
- * quoted strings. Does not interpret the specifier;
+ * quoted strings, including comments between `@import` and the
+ * specifier. Does not interpret the specifier;
  * `packageNameFromCssSpecifier` decides if it is a package.
  */
 export function cssImportSpecifiers(code: string): string[] {
   const specifiers: string[] = [];
-  const atImport =
-    /@import\s+(?:url\(\s*)?(?:"([^"]*)"|'([^']*)'|([^"')\s;]+))\s*\)?/gi;
   let i = 0;
   while (i < code.length) {
     if (code.startsWith("/*", i)) {
@@ -163,20 +162,84 @@ export function cssImportSpecifiers(code: string): string[] {
       (i === 0 || !isCssIdentContinue(code[i - 1])) &&
       code.slice(i, i + 7).toLowerCase() === "@import"
     ) {
-      atImport.lastIndex = i;
-      const match = atImport.exec(code);
-      if (match !== null && match.index === i) {
-        const spec = match[1] ?? match[2] ?? match[3];
-        if (spec !== undefined && spec !== "") {
-          specifiers.push(spec);
-        }
-        i = atImport.lastIndex;
+      const parsed = readCssImportSpecifier(
+        code,
+        skipCssWhitespaceAndComments(code, i + 7),
+      );
+      if (parsed !== null && parsed.spec !== "") {
+        specifiers.push(parsed.spec);
+        i = parsed.end;
         continue;
       }
     }
     i += 1;
   }
   return specifiers;
+}
+
+function skipCssWhitespaceAndComments(code: string, start: number): number {
+  let i = start;
+  while (i < code.length) {
+    const ch = code[i];
+    if (
+      ch === " " ||
+      ch === "\t" ||
+      ch === "\n" ||
+      ch === "\r" ||
+      ch === "\f"
+    ) {
+      i += 1;
+      continue;
+    }
+    if (code.startsWith("/*", i)) {
+      const end = code.indexOf("*/", i + 2);
+      i = end === -1 ? code.length : end + 2;
+      continue;
+    }
+    break;
+  }
+  return i;
+}
+
+function readCssImportSpecifier(
+  code: string,
+  start: number,
+): { spec: string; end: number } | null {
+  let i = start;
+  let wrappedInUrl = false;
+  if (code.slice(i, i + 4).toLowerCase() === "url(") {
+    wrappedInUrl = true;
+    i = skipCssWhitespaceAndComments(code, i + 4);
+  }
+  if (i >= code.length) {
+    return null;
+  }
+
+  const quote = code[i];
+  let spec: string;
+  if (quote === '"' || quote === "'") {
+    const end = skipCssString(code, i);
+    if (end <= i + 1 || code[end - 1] !== quote) {
+      return null;
+    }
+    spec = code.slice(i + 1, end - 1);
+    i = end;
+  } else {
+    const bare = /^[^"')\s;]+/.exec(code.slice(i));
+    if (bare === null) {
+      return null;
+    }
+    spec = bare[0];
+    i += spec.length;
+  }
+
+  if (wrappedInUrl) {
+    i = skipCssWhitespaceAndComments(code, i);
+    if (code[i] === ")") {
+      i += 1;
+    }
+  }
+  return { spec, end: i };
 }
 
 function skipCssString(code: string, start: number): number {

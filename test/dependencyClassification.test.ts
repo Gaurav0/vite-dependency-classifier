@@ -215,6 +215,16 @@ describe("cssImportSpecifiers", () => {
       ),
     ).toEqual(["pkg"]);
   });
+
+  it("reads @import when a comment sits between the keyword and specifier", () => {
+    expect(cssImportSpecifiers('@import /* note */ "pkg";')).toEqual(["pkg"]);
+    expect(cssImportSpecifiers('@import /* note */ url("pkg");')).toEqual([
+      "pkg",
+    ]);
+    expect(cssImportSpecifiers("@import url(/* x */ 'pkg' /* y */);")).toEqual([
+      "pkg",
+    ]);
+  });
 });
 
 describe("isVirtualModuleId", () => {
