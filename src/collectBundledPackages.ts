@@ -24,9 +24,59 @@ export interface BundleContents {
   /** Package names present anywhere in the output. */
   packages: Set<string>;
   /**
+   * Package names imported by surviving first-party modules.
+   * Virtual CSS wrappers are followed through to the package.
+   */
+  directPackages: Set<string>;
+  /**
    * Output chunk count. Tests use this to confirm a fixture still code-splits.
    */
   chunkCount: number;
+}
+
+/**
+ * Walk static and dynamic importers. A Vite virtual (`\0…`) is a hop, not
+ * first-party source; another package stops that branch.
+ */
+function importedByFirstParty(
+  getModuleInfo: (id: string) => {
+    importers: readonly string[];
+    dynamicImporters: readonly string[];
+  } | null,
+  startId: string,
+): boolean {
+  const seen = new Set<string>([startId]);
+  const stack = [startId];
+
+  while (stack.length > 0) {
+    const id = stack.pop();
+    if (id === undefined) {
+      break;
+    }
+
+    const info = getModuleInfo(id);
+    if (!info) {
+      continue;
+    }
+
+    for (const importer of [...info.importers, ...info.dynamicImporters]) {
+      if (seen.has(importer)) {
+        continue;
+      }
+      seen.add(importer);
+
+      if (importer.startsWith("\0")) {
+        stack.push(importer);
+        continue;
+      }
+
+      if (packageNameFromModuleId(importer) === null) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 /** Tail of the build queue; see `collectBundledPackages`. */
@@ -41,6 +91,10 @@ let queue: Promise<unknown> = Promise.resolve();
  * CSS-only packages live in `chunk.modules` here; Vite's css-post then
  * extracts them to assets and deletes pure-CSS chunks, so
  * `generateBundle` never sees them.
+ *
+ * `directPackages` walks importers of those same modules so a first-party
+ * import is distinct from a transitive that only appears because a
+ * library pulled it in.
  */
 export function collectBundledPackages(
   options: CollectBundledPackagesOptions,
@@ -61,6 +115,7 @@ async function collectOnce({
   input,
 }: CollectBundledPackagesOptions): Promise<BundleContents> {
   const packages = new Set<string>();
+  const directPackages = new Set<string>();
   let chunkCount = 0;
 
   const collect: Plugin = {
@@ -70,7 +125,13 @@ async function collectOnce({
       // placeholders here via `moduleSideEffects: 'no-treeshake'`.
       for (const id of Object.keys(chunk.modules)) {
         const name = packageNameFromModuleId(id);
-        if (name) packages.add(name);
+        if (!name) {
+          continue;
+        }
+        packages.add(name);
+        if (importedByFirstParty(this.getModuleInfo.bind(this), id)) {
+          directPackages.add(name);
+        }
       }
     },
     generateBundle(_options, bundle) {
@@ -112,5 +173,5 @@ async function collectOnce({
     }
   }
 
-  return { packages, chunkCount };
+  return { packages, directPackages, chunkCount };
 }

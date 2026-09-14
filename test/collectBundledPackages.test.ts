@@ -1,7 +1,10 @@
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { collectBundledPackages } from "../src/collectBundledPackages.ts";
-import { classifyPackages } from "../src/dependencyClassification.ts";
+import {
+  classifyPackages,
+  classifyUnlisted,
+} from "../src/dependencyClassification.ts";
 
 /**
  * Real production builds against ./fixtures. We need the bundler for this —
@@ -25,11 +28,13 @@ function collect(name: string) {
 
 describe("collectBundledPackages", () => {
   it("collects a package and its transitive dependencies", async () => {
-    const { packages: bundled } = await collect("clean");
+    const { packages: bundled, directPackages } = await collect("clean");
 
     expect(bundled.has("fixture-lib")).toBe(true);
+    expect(directPackages.has("fixture-lib")).toBe(true);
     // Transitive, not declared. classifyPackages has to ignore these.
     expect(bundled.has("fixture-leaf")).toBe(true);
+    expect(directPackages.has("fixture-leaf")).toBe(false);
   });
 
   it("maps every collected id to a usable package name", async () => {
@@ -57,10 +62,13 @@ describe("concurrent calls", () => {
     ]);
 
     expect(clean.packages.has("fixture-lib")).toBe(true);
+    expect(clean.directPackages.has("fixture-lib")).toBe(true);
     expect(guarded.packages.has("fixture-lib")).toBe(false);
+    expect(guarded.directPackages.has("fixture-lib")).toBe(false);
     // Guarded fixture has no other imports. A leaked NODE_ENV=development
     // would leave fixture-lib in the bundle.
     expect(guarded.packages.size).toBe(0);
+    expect(guarded.directPackages.size).toBe(0);
 
     expect(process.env["NODE_ENV"]).toBe(nodeEnvBefore);
   });
@@ -78,8 +86,9 @@ describe("a failed build", () => {
 
     await expect(failing).rejects.toThrow();
 
-    const { packages } = await queuedBehind;
+    const { packages, directPackages } = await queuedBehind;
     expect(packages.has("fixture-lib")).toBe(true);
+    expect(directPackages.has("fixture-lib")).toBe(true);
 
     expect(process.env["NODE_ENV"]).toBe(nodeEnvBefore);
   });
@@ -87,7 +96,7 @@ describe("a failed build", () => {
 
 describe("fixture classification", () => {
   it("reports nothing for a correctly declared dependency", async () => {
-    const { packages: bundled } = await collect("clean");
+    const { packages: bundled, directPackages } = await collect("clean");
 
     expect(
       classifyPackages({
@@ -97,14 +106,29 @@ describe("fixture classification", () => {
       }),
     ).toEqual({ missing: [], extra: [] });
 
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: ["fixture-lib"],
+        devDependencies: [],
+      }),
+    ).toEqual([]);
+
     // Empty findings aren't enough — the collector could just have returned [].
     expect(bundled.has("fixture-leaf")).toBe(true);
+    expect(directPackages.has("fixture-lib")).toBe(true);
+    expect(directPackages.has("fixture-leaf")).toBe(false);
   });
 
   it("collects a package reached only through a dynamic import", async () => {
-    const { packages: bundled, chunkCount } = await collect("dynamic-import");
+    const {
+      packages: bundled,
+      directPackages,
+      chunkCount,
+    } = await collect("dynamic-import");
 
     expect(bundled.has("fixture-lib")).toBe(true);
+    expect(directPackages.has("fixture-lib")).toBe(true);
     // Confirm it still code-splits; otherwise this test covers nothing.
     expect(chunkCount).toBeGreaterThan(1);
 
@@ -115,10 +139,22 @@ describe("fixture classification", () => {
         devDependencies: [],
       }),
     ).toEqual({ missing: [], extra: [] });
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: [],
+        devDependencies: [],
+      }),
+    ).toEqual(["fixture-lib"]);
   });
 
   it("reports a devDependency that reaches the bundle", async () => {
-    const { packages: bundled } = await collect("undeclared-runtime-import");
+    const { packages: bundled, directPackages } = await collect(
+      "undeclared-runtime-import",
+    );
+
+    expect(directPackages.has("fixture-lib")).toBe(true);
 
     expect(
       classifyPackages({
@@ -127,14 +163,24 @@ describe("fixture classification", () => {
         devDependencies: ["fixture-lib"],
       }),
     ).toEqual({ missing: ["fixture-lib"], extra: [] });
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: [],
+        devDependencies: ["fixture-lib"],
+      }),
+    ).toEqual([]);
   });
 
   it("reports nothing for a devDependency behind an import.meta.env.DEV guard", async () => {
-    const { packages: bundled } = await collect("guarded-dev-import");
+    const { packages: bundled, directPackages } =
+      await collect("guarded-dev-import");
 
     // Check the bundle, not just the findings — a collector using
     // moduleParsed would still see this package after tree-shaking.
     expect(bundled.has("fixture-lib")).toBe(false);
+    expect(directPackages.has("fixture-lib")).toBe(false);
 
     expect(
       classifyPackages({
@@ -143,12 +189,22 @@ describe("fixture classification", () => {
         devDependencies: ["fixture-lib"],
       }),
     ).toEqual({ missing: [], extra: [] });
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: [],
+        devDependencies: [],
+      }),
+    ).toEqual([]);
   });
 
   it("collects a package imported only as CSS", async () => {
-    const { packages: bundled } = await collect("css-only-import");
+    const { packages: bundled, directPackages } =
+      await collect("css-only-import");
 
     expect(bundled.has("fixture-css")).toBe(true);
+    expect(directPackages.has("fixture-css")).toBe(true);
 
     expect(
       classifyPackages({
@@ -157,6 +213,22 @@ describe("fixture classification", () => {
         devDependencies: [],
       }),
     ).toEqual({ missing: [], extra: [] });
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: ["fixture-css"],
+        devDependencies: [],
+      }),
+    ).toEqual([]);
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: [],
+        devDependencies: [],
+      }),
+    ).toEqual(["fixture-css"]);
   });
 
   it("reports a CSS-only package declared as a devDependency", async () => {
@@ -172,11 +244,13 @@ describe("fixture classification", () => {
   });
 
   it("reports nothing for a CSS import behind an import.meta.env.DEV guard", async () => {
-    const { packages: bundled } = await collect("guarded-css-import");
+    const { packages: bundled, directPackages } =
+      await collect("guarded-css-import");
 
     // Check the bundle, not just the findings — a collector using
     // moduleParsed would still see this package after tree-shaking.
     expect(bundled.has("fixture-css")).toBe(false);
+    expect(directPackages.has("fixture-css")).toBe(false);
 
     expect(
       classifyPackages({
@@ -185,10 +259,22 @@ describe("fixture classification", () => {
         devDependencies: ["fixture-css"],
       }),
     ).toEqual({ missing: [], extra: [] });
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: [],
+        devDependencies: [],
+      }),
+    ).toEqual([]);
   });
 
   it("reports a declared dependency that never reaches the bundle", async () => {
-    const { packages: bundled } = await collect("unused-declared-dep");
+    const { packages: bundled, directPackages } = await collect(
+      "unused-declared-dep",
+    );
+
+    expect(directPackages.has("unused-pkg")).toBe(false);
 
     expect(
       classifyPackages({
@@ -197,12 +283,21 @@ describe("fixture classification", () => {
         devDependencies: [],
       }),
     ).toEqual({ missing: [], extra: ["unused-pkg"] });
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: [],
+        devDependencies: [],
+      }),
+    ).toEqual([]);
   });
 
   it("exempts a transitive-only devDependency, and reports it without the allowlist", async () => {
     // With the allowlist and without it. The second assertion is the one
     // that fails if transitiveDevs is ignored.
-    const { packages: bundled } = await collect("transitive-dev");
+    const { packages: bundled, directPackages } =
+      await collect("transitive-dev");
     const declared = {
       bundled,
       dependencies: ["fixture-lib"],
@@ -210,6 +305,8 @@ describe("fixture classification", () => {
     };
 
     expect(bundled.has("fixture-leaf")).toBe(true);
+    expect(directPackages.has("fixture-lib")).toBe(true);
+    expect(directPackages.has("fixture-leaf")).toBe(false);
 
     expect(
       classifyPackages({ ...declared, transitiveDevs: ["fixture-leaf"] }),
@@ -219,17 +316,27 @@ describe("fixture classification", () => {
       missing: ["fixture-leaf"],
       extra: [],
     });
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: ["fixture-lib"],
+        devDependencies: ["fixture-leaf"],
+      }),
+    ).toEqual([]);
   });
 
   it("exempts a runtime peer, and reports it without the allowlist", async () => {
     // With the allowlist and without it. The second assertion is the one
     // that fails if runtimePeers is ignored.
-    const { packages: bundled } = await collect("runtime-peer");
+    const { packages: bundled, directPackages } = await collect("runtime-peer");
     const declared = {
       bundled,
       dependencies: ["runtime-peer-pkg"],
       devDependencies: [],
     };
+
+    expect(directPackages.has("runtime-peer-pkg")).toBe(false);
 
     expect(
       classifyPackages({ ...declared, runtimePeers: ["runtime-peer-pkg"] }),
@@ -239,14 +346,24 @@ describe("fixture classification", () => {
       missing: [],
       extra: ["runtime-peer-pkg"],
     });
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: [],
+        devDependencies: [],
+      }),
+    ).toEqual([]);
   });
 
   it("reports a dependency reached only through a type-only import", async () => {
-    const { packages: bundled } = await collect("type-only-import");
+    const { packages: bundled, directPackages } =
+      await collect("type-only-import");
 
     // import type is erased. Check the bundle too — extra would also fire
     // if the import never built.
     expect(bundled.has("fixture-lib")).toBe(false);
+    expect(directPackages.has("fixture-lib")).toBe(false);
 
     expect(
       classifyPackages({
@@ -255,5 +372,13 @@ describe("fixture classification", () => {
         devDependencies: [],
       }),
     ).toEqual({ missing: [], extra: ["fixture-lib"] });
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: [],
+        devDependencies: [],
+      }),
+    ).toEqual([]);
   });
 });
