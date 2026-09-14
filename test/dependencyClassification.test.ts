@@ -6,6 +6,7 @@ import {
   isVirtualModuleId,
   moduleFilePath,
   packageNameFromModuleId,
+  packageNameFromSassSpecifier,
 } from "../src/dependencyClassification.ts";
 
 describe("packageNameFromModuleId", () => {
@@ -81,6 +82,33 @@ describe("packageNameFromModuleId", () => {
         "/repo/node_modules/fixture-cjs/index.js?commonjs-proxy",
       ),
     ).toBe("fixture-cjs");
+  });
+});
+
+describe("packageNameFromSassSpecifier", () => {
+  it("reads a package name from a bare @use specifier", () => {
+    expect(packageNameFromSassSpecifier("bulma/sass/utilities")).toBe("bulma");
+  });
+
+  it("keeps the scope on a scoped package", () => {
+    expect(packageNameFromSassSpecifier("@acme/theme/colors")).toBe(
+      "@acme/theme",
+    );
+  });
+
+  it("strips the pkg: Node package importer prefix", () => {
+    expect(packageNameFromSassSpecifier("pkg:bulma")).toBe("bulma");
+    expect(packageNameFromSassSpecifier("pkg:@acme/theme/colors")).toBe(
+      "@acme/theme",
+    );
+  });
+
+  it("returns null for relative paths, builtins, and other URLs", () => {
+    expect(packageNameFromSassSpecifier("./partial")).toBeNull();
+    expect(packageNameFromSassSpecifier("../theme")).toBeNull();
+    expect(packageNameFromSassSpecifier("/abs/file.scss")).toBeNull();
+    expect(packageNameFromSassSpecifier("sass:math")).toBeNull();
+    expect(packageNameFromSassSpecifier("file:///tmp/x.scss")).toBeNull();
   });
 });
 
