@@ -144,6 +144,8 @@ let queue: Promise<unknown> = Promise.resolve();
  * same way: first-party specifiers are parsed from the stylesheet, and
  * nested package files come from `addWatchFile` during `vite:css` (one
  * wrap for the build; overlapping transforms share it, ALS attributes).
+ * First-party files Vite resolved (aliases, `#imports`) are walked the
+ * same as a relative `@import`; we do not implement the resolver.
  *
  * `directPackages` walks importers of those same modules so a first-party
  * import (source under `root`) is distinct from a transitive that only
@@ -183,6 +185,7 @@ async function collectOnce({
     direct: new Set<string>(),
   };
   let watchFileIntercept: WatchFileIntercept | null = null;
+  const cssAtImportSeen = new Set<string>();
 
   function targetForCurrentStylesheet(): {
     names: Set<string>;
@@ -224,11 +227,29 @@ async function collectOnce({
   }
 
   function recordWatchFile(file: string): void {
-    const name = packageNameFromModuleId(file);
-    if (name === null) {
+    const filePath = moduleFilePath(file);
+    const name = packageNameFromModuleId(filePath);
+    if (name !== null) {
+      targetForCurrentStylesheet().names.add(name);
       return;
     }
-    targetForCurrentStylesheet().names.add(name);
+    walkFirstPartyWatchedCss(filePath);
+  }
+
+  function walkFirstPartyWatchedCss(filePath: string): void {
+    if (PREPROCESSOR_FILE.test(filePath)) {
+      return;
+    }
+    if (!isFirstPartySourceId(filePath, resolvedRoot)) {
+      return;
+    }
+    let code: string;
+    try {
+      code = fs.readFileSync(filePath, "utf8");
+    } catch {
+      return;
+    }
+    walkCssAtImports(code, filePath, cssAtImportSeen);
   }
 
   function recordCssAtImportsFromSource(code: string, id: string): void {
@@ -236,7 +257,7 @@ async function collectOnce({
     if (PREPROCESSOR_FILE.test(filePath)) {
       return;
     }
-    walkCssAtImports(code, filePath, new Set());
+    walkCssAtImports(code, filePath, cssAtImportSeen);
   }
 
   function walkCssAtImports(

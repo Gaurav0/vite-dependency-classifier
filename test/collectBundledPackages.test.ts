@@ -428,6 +428,26 @@ describe("fixture classification", () => {
     ).toEqual(["fixture-css-theme"]);
   });
 
+  it("walks a Vite-aliased first-party CSS @import", async () => {
+    const { packages: bundled, directPackages } = await collectBundledPackages({
+      root: fixture("css-at-import-alias"),
+    });
+
+    expect(directPackages.has("fixture-css-theme")).toBe(true);
+    expect(directPackages.has("fixture-css")).toBe(false);
+    expect(bundled.has("fixture-css-theme")).toBe(true);
+    expect(bundled.has("fixture-css")).toBe(true);
+    expect(directPackages.has("@")).toBe(false);
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: [],
+        devDependencies: [],
+      }),
+    ).toEqual(["fixture-css-theme"]);
+  });
+
   it("reports nothing for a CSS @import behind an import.meta.env.DEV guard", async () => {
     const { packages: bundled, directPackages } = await collect(
       "guarded-css-at-import",

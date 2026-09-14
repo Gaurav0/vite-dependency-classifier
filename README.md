@@ -182,7 +182,9 @@ Vite inlines those files (`postcss-import` / LightningCSS), so they never
 become Vite module ids. They are still in the compiled CSS and belong in
 `dependencies`. An undeclared first-party production `@import` is
 `unlisted`, not silent. Nested `@import`s inside that package ship too,
-but they are not `unlisted` unless first-party source wrote them.
+but they are not `unlisted` unless first-party source wrote them. A Vite
+alias (`@/theme.css`) that resolves to first-party source is walked the
+same way; we use the path Vite already resolved.
 
 **A package pulled in only through Sass `@use` / `@forward` still ships.**
 The preprocessor inlines those files, so they never become Vite module
