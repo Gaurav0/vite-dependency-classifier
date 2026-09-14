@@ -1,6 +1,6 @@
 {
   "name": "vite-dependency-classifier",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Check that a Vite project's dependencies/devDependencies split matches what the production build actually contains.",
   "keywords": [
     "vite",
