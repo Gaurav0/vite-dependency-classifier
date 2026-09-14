@@ -98,6 +98,62 @@ export function packageNameFromSassSpecifier(url: string): string | null {
   return packageNameFromSegments(segments[0], segments[1]);
 }
 
+/**
+ * Package name from a CSS `@import` specifier.
+ *
+ * Vite inlines `@import`; those files never become Vite module ids.
+ * `url()`, quotes, `layer()`, and media queries unwrap to the path.
+ * Relative paths, absolute paths, `http(s):`, `data:`, and
+ * protocol-relative URLs are not packages.
+ */
+export function packageNameFromCssSpecifier(spec: string): string | null {
+  const unwrapped = unwrapCssImportSpecifier(spec);
+  if (
+    unwrapped.startsWith(".") ||
+    unwrapped.startsWith("/") ||
+    unwrapped.includes(":")
+  ) {
+    return null;
+  }
+
+  const segments = unwrapped.split("/");
+  return packageNameFromSegments(segments[0], segments[1]);
+}
+
+/**
+ * Specifiers from CSS `@import` rules, in source order.
+ *
+ * Handles `"pkg"`, `'pkg'`, `url("pkg")`, `url('pkg')`, `url(pkg)`,
+ * and trailing `layer()` / media queries. Does not interpret the
+ * specifier; `packageNameFromCssSpecifier` decides if it is a package.
+ */
+export function cssImportSpecifiers(code: string): string[] {
+  const specifiers: string[] = [];
+  const atImport =
+    /@import\s+(?:url\(\s*)?(?:"([^"]*)"|'([^']*)'|([^"')\s;]+))\s*\)?/gi;
+  let match: RegExpExecArray | null;
+  while ((match = atImport.exec(code)) !== null) {
+    const spec = match[1] ?? match[2] ?? match[3];
+    if (spec !== undefined && spec !== "") {
+      specifiers.push(spec);
+    }
+  }
+  return specifiers;
+}
+
+function unwrapCssImportSpecifier(spec: string): string {
+  const trimmed = spec.trim();
+  const url = /^url\(\s*(?:"([^"]*)"|'([^']*)'|([^)]*?))\s*\)$/i.exec(trimmed);
+  if (url) {
+    return (url[1] ?? url[2] ?? url[3] ?? "").trim();
+  }
+  const quoted = /^(?:"([^"]*)"|'([^']*)')$/.exec(trimmed);
+  if (quoted) {
+    return (quoted[1] ?? quoted[2] ?? "").trim();
+  }
+  return trimmed;
+}
+
 function packageNameFromSegments(
   first: string | undefined,
   second: string | undefined,

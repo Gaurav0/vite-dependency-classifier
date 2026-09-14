@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   classifyPackages,
   classifyUnlisted,
+  cssImportSpecifiers,
   isFirstPartySourceId,
   isVirtualModuleId,
   moduleFilePath,
+  packageNameFromCssSpecifier,
   packageNameFromModuleId,
   packageNameFromSassSpecifier,
 } from "../src/dependencyClassification.ts";
@@ -109,6 +111,80 @@ describe("packageNameFromSassSpecifier", () => {
     expect(packageNameFromSassSpecifier("/abs/file.scss")).toBeNull();
     expect(packageNameFromSassSpecifier("sass:math")).toBeNull();
     expect(packageNameFromSassSpecifier("file:///tmp/x.scss")).toBeNull();
+  });
+});
+
+describe("packageNameFromCssSpecifier", () => {
+  it("reads a package name from a bare subpath", () => {
+    expect(packageNameFromCssSpecifier("bulma/css/bulma.css")).toBe("bulma");
+  });
+
+  it("keeps a dotted package name", () => {
+    expect(packageNameFromCssSpecifier("normalize.css")).toBe("normalize.css");
+  });
+
+  it("keeps the scope on a scoped package", () => {
+    expect(packageNameFromCssSpecifier("@acme/theme/base.css")).toBe(
+      "@acme/theme",
+    );
+  });
+
+  it("unwraps url() with double quotes, single quotes, and none", () => {
+    expect(packageNameFromCssSpecifier('url("open-props")')).toBe("open-props");
+    expect(packageNameFromCssSpecifier("url('open-props')")).toBe("open-props");
+    expect(packageNameFromCssSpecifier("url(open-props)")).toBe("open-props");
+  });
+
+  it("returns null for relative paths, absolute paths, and other URLs", () => {
+    expect(packageNameFromCssSpecifier("./partial.css")).toBeNull();
+    expect(packageNameFromCssSpecifier("../theme")).toBeNull();
+    expect(packageNameFromCssSpecifier("/abs/file.css")).toBeNull();
+    expect(
+      packageNameFromCssSpecifier("https://fonts.example/x.css"),
+    ).toBeNull();
+    expect(
+      packageNameFromCssSpecifier('url("https://fonts.example/x.css")'),
+    ).toBeNull();
+    expect(
+      packageNameFromCssSpecifier("data:text/css,body{color:red}"),
+    ).toBeNull();
+    expect(packageNameFromCssSpecifier("//example.com/x.css")).toBeNull();
+  });
+});
+
+describe("cssImportSpecifiers", () => {
+  it("reads a double-quoted @import", () => {
+    expect(cssImportSpecifiers('@import "pkg";')).toEqual(["pkg"]);
+  });
+
+  it("reads a single-quoted @import", () => {
+    expect(cssImportSpecifiers("@import 'pkg';")).toEqual(["pkg"]);
+  });
+
+  it("reads a url() @import", () => {
+    expect(cssImportSpecifiers('@import url("pkg");')).toEqual(["pkg"]);
+  });
+
+  it("strips layer() and media queries after the specifier", () => {
+    expect(cssImportSpecifiers('@import "pkg" layer(base);')).toEqual(["pkg"]);
+    expect(cssImportSpecifiers('@import "pkg" print;')).toEqual(["pkg"]);
+    expect(cssImportSpecifiers('@import "pkg" layer(base) print;')).toEqual([
+      "pkg",
+    ]);
+  });
+
+  it("returns two @imports in source order", () => {
+    expect(cssImportSpecifiers('@import "first";\n@import "second";')).toEqual([
+      "first",
+      "second",
+    ]);
+  });
+
+  it("yields an https URL so the name helper can reject it", () => {
+    expect(
+      cssImportSpecifiers('@import url("https://example.com/x.css");'),
+    ).toEqual(["https://example.com/x.css"]);
+    expect(packageNameFromCssSpecifier("https://example.com/x.css")).toBeNull();
   });
 });
 
