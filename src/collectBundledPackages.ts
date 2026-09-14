@@ -250,48 +250,20 @@ async function collectOnce({
     } catch {
       return;
     }
-    walkCssAtImports(code, filePath, cssAtImportSeen);
+    walkCssAtImports(code, filePath, cssAtImportSeen, recordInlinedPackage);
   }
 
   function recordCssAtImportsFromSource(code: string, id: string): void {
     if (isPreprocessorCssId(id)) {
       return;
     }
-    walkCssAtImports(code, moduleFilePath(id), cssAtImportSeen);
-  }
-
-  function walkCssAtImports(
-    code: string,
-    containingFile: string,
-    seen: Set<string>,
-  ): void {
-    if (seen.has(containingFile)) {
-      return;
-    }
-    seen.add(containingFile);
-
-    for (const spec of cssImportSpecifiers(code)) {
-      // CSS @import is URL resolution (Vite preferRelative): "file.css"
-      // and "dir/file.css" are local files, not npm names. Try the
-      // filesystem first; only a miss is a package specifier.
-      if (isCssRelativeUrl(spec)) {
-        const resolved = resolveRelativeCss(containingFile, spec);
-        if (resolved !== null) {
-          let nextCode: string;
-          try {
-            nextCode = fs.readFileSync(resolved, "utf8");
-          } catch {
-            continue;
-          }
-          walkCssAtImports(nextCode, resolved, seen);
-          continue;
-        }
-      }
-      const name = packageNameFromCssSpecifier(spec);
-      if (name !== null) {
-        recordInlinedPackage(name, containingFile);
-      }
-    }
+    walkCssAtImports(
+      code,
+      moduleFilePath(id),
+      cssAtImportSeen,
+      recordInlinedPackage,
+      id,
+    );
   }
 
   const sassImporter = {
@@ -413,6 +385,48 @@ async function collectOnce({
   }
 
   return { packages, directPackages, chunkCount };
+}
+
+/**
+ * Walk CSS `@import` specifiers. `seenKey` identifies this module in
+ * the cycle set: a Vue/Svelte style block uses the full id (query
+ * included) so two `<style>` blocks on the same file are both walked.
+ * Relative files use their resolved path.
+ */
+export function walkCssAtImports(
+  code: string,
+  containingFile: string,
+  seen: Set<string>,
+  record: (name: string, containingFile: string) => void,
+  seenKey: string = containingFile,
+): void {
+  if (seen.has(seenKey)) {
+    return;
+  }
+  seen.add(seenKey);
+
+  for (const spec of cssImportSpecifiers(code)) {
+    // CSS @import is URL resolution (Vite preferRelative): "file.css"
+    // and "dir/file.css" are local files, not npm names. Try the
+    // filesystem first; only a miss is a package specifier.
+    if (isCssRelativeUrl(spec)) {
+      const resolved = resolveRelativeCss(containingFile, spec);
+      if (resolved !== null) {
+        let nextCode: string;
+        try {
+          nextCode = fs.readFileSync(resolved, "utf8");
+        } catch {
+          continue;
+        }
+        walkCssAtImports(nextCode, resolved, seen, record);
+        continue;
+      }
+    }
+    const name = packageNameFromCssSpecifier(spec);
+    if (name !== null) {
+      record(name, containingFile);
+    }
+  }
 }
 
 /** Absolute `/…`, protocol-relative `//…`, and `http(s):` / `data:` are not files. */

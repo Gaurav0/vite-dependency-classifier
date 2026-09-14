@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   collectBundledPackages,
+  walkCssAtImports,
   wrapCssTransformWithStylesheetContext,
 } from "../src/collectBundledPackages.ts";
 import {
@@ -645,6 +646,47 @@ describe("fixture classification", () => {
         devDependencies: [],
       }),
     ).toEqual([]);
+  });
+});
+
+describe("walkCssAtImports", () => {
+  it("walks two CSS modules that share a path and differ by query", () => {
+    const seen = new Set<string>();
+    const names: string[] = [];
+    const file = "/repo/src/App.vue";
+    const record = (name: string): void => {
+      names.push(name);
+    };
+
+    walkCssAtImports(
+      '@import "pkg-a";',
+      file,
+      seen,
+      record,
+      `${file}?vue&type=style&index=0&lang.css`,
+    );
+    walkCssAtImports(
+      '@import "pkg-b";',
+      file,
+      seen,
+      record,
+      `${file}?vue&type=style&index=1&lang.css`,
+    );
+
+    expect(names).toEqual(["pkg-a", "pkg-b"]);
+  });
+
+  it("does not re-walk the same module id", () => {
+    const seen = new Set<string>();
+    const names: string[] = [];
+    const record = (name: string): void => {
+      names.push(name);
+    };
+
+    walkCssAtImports('@import "pkg-a";', "/repo/a.css", seen, record);
+    walkCssAtImports('@import "pkg-b";', "/repo/a.css", seen, record);
+
+    expect(names).toEqual(["pkg-a"]);
   });
 });
 
