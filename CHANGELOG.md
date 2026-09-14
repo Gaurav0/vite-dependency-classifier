@@ -45,6 +45,13 @@ and this project adheres to
   (first-party `@import` plus nested package CSS). A declared CSS-`@import`
   `dependency` is not `extra`; a shipping `devDependency` is `missing`;
   an undeclared first-party `@import` is `unlisted`.
+- Less `@import` of a package is no longer treated as absent from the
+  production bundle. The preprocessor inlines those files, so they never
+  appear as Vite module ids; a first-party `@import` is collected from
+  standalone `.less` source, and nested package Less from `addWatchFile`.
+  A declared Less-`@import` `dependency` is not `extra`; a shipping
+  `devDependency` is `missing`; an undeclared first-party `@import` is
+  `unlisted`.
 
 ## [0.1.1] - 2026-09-13
 
