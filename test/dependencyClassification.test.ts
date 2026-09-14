@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   classifyPackages,
+  classifyUnlisted,
   packageNameFromModuleId,
 } from "../src/dependencyClassification.ts";
 
@@ -176,5 +177,97 @@ describe("classifyPackages", () => {
 
   it("returns empty lists for empty input", () => {
     expect(classifyPackages(base)).toEqual({ missing: [], extra: [] });
+  });
+});
+
+describe("classifyUnlisted", () => {
+  const base = {
+    direct: [],
+    dependencies: [],
+    devDependencies: [],
+  };
+
+  it("reports a direct import listed in none of the four fields", () => {
+    expect(
+      classifyUnlisted({
+        ...base,
+        direct: ["fixture-lib"],
+      }),
+    ).toEqual(["fixture-lib"]);
+  });
+
+  it("ignores a direct import listed in dependencies", () => {
+    expect(
+      classifyUnlisted({
+        ...base,
+        direct: ["fixture-lib"],
+        dependencies: ["fixture-lib"],
+      }),
+    ).toEqual([]);
+  });
+
+  it("ignores a direct import listed in devDependencies", () => {
+    // Wrong field is `missing`, not unlisted.
+    expect(
+      classifyUnlisted({
+        ...base,
+        direct: ["fixture-lib"],
+        devDependencies: ["fixture-lib"],
+      }),
+    ).toEqual([]);
+  });
+
+  it("ignores a direct import listed in peerDependencies", () => {
+    expect(
+      classifyUnlisted({
+        ...base,
+        direct: ["fixture-lib"],
+        peerDependencies: ["fixture-lib"],
+      }),
+    ).toEqual([]);
+  });
+
+  it("ignores a direct import listed in optionalDependencies", () => {
+    expect(
+      classifyUnlisted({
+        ...base,
+        direct: ["fixture-lib"],
+        optionalDependencies: ["fixture-lib"],
+      }),
+    ).toEqual([]);
+  });
+
+  it("ignores a direct import listed in both dependencies and devDependencies", () => {
+    expect(
+      classifyUnlisted({
+        ...base,
+        direct: ["vite"],
+        dependencies: ["vite"],
+        devDependencies: ["vite"],
+      }),
+    ).toEqual([]);
+  });
+
+  it("returns sorted unique names for two undeclared direct imports", () => {
+    expect(
+      classifyUnlisted({
+        ...base,
+        direct: ["zod", "fixture-lib", "zod"],
+      }),
+    ).toEqual(["fixture-lib", "zod"]);
+  });
+
+  it("returns empty when nothing is direct", () => {
+    // Transitives live in `packages`, not `direct`.
+    expect(classifyUnlisted(base)).toEqual([]);
+  });
+
+  it("ignores a declared name that is not direct", () => {
+    expect(
+      classifyUnlisted({
+        ...base,
+        dependencies: ["unused-pkg"],
+      }),
+    ).toEqual([]);
   });
 });

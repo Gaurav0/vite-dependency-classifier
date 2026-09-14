@@ -80,8 +80,10 @@ export interface Classification {
  * packages (scheduler via react-dom, etc.) show up in the bundle but
  * aren't declared, and that's fine.
  *
- * A phantom — imported in src/ but listed in neither field — looks
- * identical to a transitive dep here. That's a different check.
+ * An unlisted package — imported by first-party production source but
+ * listed in none of the four package.json fields — looks identical to
+ * a transitive dep here. Use `classifyUnlisted` with the first-party
+ * direct set, not this function.
  */
 export function classifyPackages({
   bundled,
@@ -110,4 +112,42 @@ export function classifyPackages({
     .sort();
 
   return { missing, extra };
+}
+
+export interface ClassifyUnlistedInput {
+  /** Package names imported by surviving first-party production modules. */
+  direct: Iterable<string>;
+  /** Names from package.json `dependencies`. */
+  dependencies: Iterable<string>;
+  /** Names from package.json `devDependencies`. */
+  devDependencies: Iterable<string>;
+  /** Names from package.json `peerDependencies`. */
+  peerDependencies?: Iterable<string>;
+  /** Names from package.json `optionalDependencies`. */
+  optionalDependencies?: Iterable<string>;
+}
+
+/**
+ * Direct first-party production imports that are listed in none of
+ * `dependencies`, `devDependencies`, `peerDependencies`, or
+ * `optionalDependencies`.
+ *
+ * `missing` / `extra` stay in `classifyPackages`. A direct import that
+ * is already a `devDependency` is declared, so it is not unlisted.
+ */
+export function classifyUnlisted({
+  direct,
+  dependencies,
+  devDependencies,
+  peerDependencies = [],
+  optionalDependencies = [],
+}: ClassifyUnlistedInput): string[] {
+  const declared = new Set([
+    ...dependencies,
+    ...devDependencies,
+    ...peerDependencies,
+    ...optionalDependencies,
+  ]);
+
+  return [...new Set(direct)].filter((name) => !declared.has(name)).sort();
 }
