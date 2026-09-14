@@ -8,6 +8,15 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- CSS `@import` of a package is no longer treated as absent from the
+  production bundle. Vite inlines those files, so they never appear as
+  module ids; they are collected during the production compile
+  (first-party `@import` plus nested package CSS). A declared CSS-`@import`
+  `dependency` is not `extra`; a shipping `devDependency` is `missing`;
+  an undeclared first-party `@import` is `unlisted`.
+
 ## [0.2.0] - 2026-09-14
 
 ### Added

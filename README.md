@@ -170,11 +170,19 @@ guard is what makes the `devDependency` classification true rather than
 merely harmless. A DEV-only import listed nowhere is out of scope: it is
 not in the production graph, so it is not `unlisted`.
 
-**A package imported only as CSS still ships.** Vite extracts stylesheets
-into assets and drops the JS placeholders those imports used, so the
-package never appears in a remaining JavaScript chunk. It is still in the
+**A package imported from JavaScript only as a stylesheet still ships.**
+`import "pkg"` whose entry is CSS: Vite extracts the stylesheet into an
+asset and drops the JS placeholders those imports used, so the package
+never appears in a remaining JavaScript chunk. It is still in the
 production output and belongs in `dependencies`. An undeclared CSS-only
 production import is `unlisted`, not silent.
+
+**A package pulled in only through plain CSS `@import` still ships.**
+Vite inlines those files (`postcss-import` / LightningCSS), so they never
+become Vite module ids. They are still in the compiled CSS and belong in
+`dependencies`. An undeclared first-party production `@import` is
+`unlisted`, not silent. Nested `@import`s inside that package ship too,
+but they are not `unlisted` unless first-party source wrote them.
 
 **A package pulled in only through Sass `@use` / `@forward` still ships.**
 The preprocessor inlines those files, so they never become Vite module
@@ -253,6 +261,7 @@ npm run build
 ```
 
 Fixture projects import `fixture-lib`, `fixture-leaf`, `fixture-css`,
-`fixture-sass`, and `fixture-cjs` from `test/fixtures/packages`, installed
-at the repo root as `file:` devDependencies. Vite's walk-up resolution
-then yields real `/node_modules/<name>/` module ids.
+`fixture-css-theme`, `fixture-sass`, and `fixture-cjs` from
+`test/fixtures/packages`, installed at the repo root as `file:`
+devDependencies. Vite's walk-up resolution then yields real
+`/node_modules/<name>/` module ids.
