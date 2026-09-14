@@ -18,6 +18,12 @@ import {
   packageNameFromModuleId,
   packageNameFromSassSpecifier,
 } from "./dependencyClassification.ts";
+import {
+  ensureWatchFileIntercept,
+  restoreWatchFileIntercept,
+  type WatchFileHost,
+  type WatchFileIntercept,
+} from "./watchFileIntercept.ts";
 
 export interface CollectBundledPackagesOptions {
   /** Project root to build. */
@@ -136,7 +142,8 @@ let queue: Promise<unknown> = Promise.resolve();
  * package is inlined by the preprocessor, so those names come from a
  * Sass importer instead. CSS `@import` of a package is inlined the
  * same way: first-party specifiers are parsed from the stylesheet, and
- * nested package files come from `addWatchFile` during `vite:css`.
+ * nested package files come from `addWatchFile` during `vite:css` (one
+ * wrap for the build; overlapping transforms share it, ALS attributes).
  *
  * `directPackages` walks importers of those same modules so a first-party
  * import (source under `root`) is distinct from a transitive that only
@@ -175,6 +182,7 @@ async function collectOnce({
     names: new Set<string>(),
     direct: new Set<string>(),
   };
+  let watchFileIntercept: WatchFileIntercept | null = null;
 
   function targetForCurrentStylesheet(): {
     names: Set<string>;
@@ -293,7 +301,12 @@ async function collectOnce({
         (id, run, host, code) =>
           stylesheetCompile.run(moduleFilePath(id), () => {
             recordCssAtImportsFromSource(code, id);
-            return interceptAddWatchFile(host, recordWatchFile, run);
+            watchFileIntercept = ensureWatchFileIntercept(
+              host,
+              recordWatchFile,
+              watchFileIntercept,
+            );
+            return run();
           }),
       );
     },
@@ -363,6 +376,7 @@ async function collectOnce({
       plugins: [collect],
     });
   } finally {
+    restoreWatchFileIntercept(watchFileIntercept);
     if (previousNodeEnv === undefined) {
       delete process.env["NODE_ENV"];
     } else {
@@ -392,55 +406,6 @@ function resolveRelativeCss(fromFile: string, spec: string): string | null {
     }
   }
   return null;
-}
-
-interface WatchFileHost {
-  addWatchFile: (id: string) => void;
-}
-
-function interceptAddWatchFile<T>(
-  host: WatchFileHost,
-  record: (file: string) => void,
-  run: () => T,
-): T {
-  const originalAddWatchFile = host.addWatchFile;
-  if (typeof originalAddWatchFile !== "function") {
-    return run();
-  }
-  const wrapped = (file: string): void => {
-    record(file);
-    originalAddWatchFile.call(host, file);
-  };
-  try {
-    host.addWatchFile = wrapped;
-  } catch {
-    return run();
-  }
-  const restore = (): void => {
-    if (host.addWatchFile === wrapped) {
-      host.addWatchFile = originalAddWatchFile;
-    }
-  };
-  try {
-    const result = run();
-    if (isThenable(result)) {
-      return Promise.resolve(result).finally(restore) as T;
-    }
-    restore();
-    return result;
-  } catch (error) {
-    restore();
-    throw error;
-  }
-}
-
-function isThenable(value: unknown): value is PromiseLike<unknown> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "then" in value &&
-    typeof value.then === "function"
-  );
 }
 
 function prependSassImporter(
