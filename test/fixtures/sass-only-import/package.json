@@ -1,0 +1,8 @@
+{
+  "name": "fixture-sass-only-import",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "fixture-sass": "*"
+  }
+}
