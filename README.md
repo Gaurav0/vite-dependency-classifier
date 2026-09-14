@@ -176,6 +176,11 @@ package never appears in a remaining JavaScript chunk. It is still in the
 production output and belongs in `dependencies`. An undeclared CSS-only
 production import is `unlisted`, not silent.
 
+**A package pulled in only through Sass `@use` / `@forward` still ships.**
+The preprocessor inlines those files, so they never become Vite module
+ids. They are still in the compiled CSS and belong in `dependencies`.
+An undeclared Sass-only production import is `unlisted`, not silent.
+
 **A type-only import is not a runtime dependency.** `import type ...` is
 erased at build time and contributes nothing to the bundle, so a package used
 only that way belongs in `devDependencies`. An undeclared type-only import is
@@ -247,7 +252,7 @@ npm run format:check
 npm run build
 ```
 
-Fixture projects import `fixture-lib`, `fixture-leaf`, `fixture-css`, and
-`fixture-cjs` from `test/fixtures/packages`, installed at the repo root as
-`file:` devDependencies. Vite's walk-up resolution then yields real
-`/node_modules/<name>/` module ids.
+Fixture projects import `fixture-lib`, `fixture-leaf`, `fixture-css`,
+`fixture-sass`, and `fixture-cjs` from `test/fixtures/packages`, installed
+at the repo root as `file:` devDependencies. Vite's walk-up resolution
+then yields real `/node_modules/<name>/` module ids.
