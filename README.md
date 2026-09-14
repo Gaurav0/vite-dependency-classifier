@@ -184,7 +184,8 @@ become Vite module ids. They are still in the compiled CSS and belong in
 `unlisted`, not silent. Nested `@import`s inside that package ship too,
 but they are not `unlisted` unless first-party source wrote them. A Vite
 alias (`@/theme.css`) that resolves to first-party source is walked the
-same way; we use the path Vite already resolved.
+same way; we use the path Vite already resolved. A Node `#imports`
+specifier that maps to a package is a first-party import of that package.
 
 **A package pulled in only through Sass `@use` / `@forward` still ships.**
 The preprocessor inlines those files, so they never become Vite module

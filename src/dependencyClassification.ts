@@ -136,6 +136,38 @@ export function packageNameFromCssSpecifier(spec: string): string | null {
 }
 
 /**
+ * Package name from a Node `#imports` specifier using this project's
+ * package.json `imports` map. Relative targets are first-party files
+ * (walked via addWatchFile), not packages.
+ */
+export function packageNameFromHashImport(
+  spec: string,
+  imports: Record<string, unknown> | undefined,
+): string | null {
+  if (!spec.startsWith("#") || imports === undefined) {
+    return null;
+  }
+  const mapped = importMapTarget(imports[spec]);
+  if (mapped === null) {
+    return null;
+  }
+  return packageNameFromCssSpecifier(mapped);
+}
+
+function importMapTarget(value: unknown): string | null {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    const rec = value as Record<string, unknown>;
+    return importMapTarget(
+      rec["default"] ?? rec["import"] ?? rec["browser"] ?? rec["require"],
+    );
+  }
+  return null;
+}
+
+/**
  * Specifiers from CSS `@import` rules, in source order.
  *
  * Handles `"pkg"`, `'pkg'`, `url("pkg")`, `url('pkg')`, `url(pkg)`,

@@ -8,6 +8,7 @@ import {
   isVirtualModuleId,
   moduleFilePath,
   packageNameFromCssSpecifier,
+  packageNameFromHashImport,
   packageNameFromModuleId,
   packageNameFromSassSpecifier,
 } from "../src/dependencyClassification.ts";
@@ -164,6 +165,35 @@ describe("packageNameFromCssSpecifier", () => {
 
   it("returns null for a #imports specifier", () => {
     expect(packageNameFromCssSpecifier("#internal/x.css")).toBeNull();
+  });
+});
+
+describe("packageNameFromHashImport", () => {
+  it("reads a package from an exact imports mapping", () => {
+    expect(
+      packageNameFromHashImport("#theme", {
+        "#theme": "fixture-css-theme/index.css",
+      }),
+    ).toBe("fixture-css-theme");
+  });
+
+  it("reads a package from a conditional imports mapping", () => {
+    expect(
+      packageNameFromHashImport("#theme", {
+        "#theme": { default: "fixture-css-theme/index.css" },
+      }),
+    ).toBe("fixture-css-theme");
+  });
+
+  it("returns null when the mapping is a relative file", () => {
+    expect(
+      packageNameFromHashImport("#theme", { "#theme": "./src/theme.css" }),
+    ).toBeNull();
+  });
+
+  it("returns null when the specifier is missing from imports", () => {
+    expect(packageNameFromHashImport("#theme", { "#other": "pkg" })).toBeNull();
+    expect(packageNameFromHashImport("#theme", undefined)).toBeNull();
   });
 });
 

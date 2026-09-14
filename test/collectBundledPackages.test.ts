@@ -449,6 +449,25 @@ describe("fixture classification", () => {
     ).toEqual(["fixture-css-theme"]);
   });
 
+  it("treats a #imports CSS @import that maps to a package as direct", async () => {
+    const { packages: bundled, directPackages } =
+      await collect("css-at-import-hash");
+
+    expect(directPackages.has("fixture-css-theme")).toBe(true);
+    expect(directPackages.has("fixture-css")).toBe(false);
+    expect(bundled.has("fixture-css-theme")).toBe(true);
+    expect(bundled.has("fixture-css")).toBe(true);
+    expect(directPackages.has("#theme")).toBe(false);
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: [],
+        devDependencies: [],
+      }),
+    ).toEqual(["fixture-css-theme"]);
+  });
+
   it("reports nothing for a CSS @import behind an import.meta.env.DEV guard", async () => {
     const { packages: bundled, directPackages } = await collect(
       "guarded-css-at-import",
@@ -687,6 +706,19 @@ describe("walkCssAtImports", () => {
     walkCssAtImports('@import "pkg-b";', "/repo/a.css", seen, record);
 
     expect(names).toEqual(["pkg-a"]);
+  });
+
+  it("records a #imports specifier that maps to a package", () => {
+    const names: string[] = [];
+    walkCssAtImports(
+      '@import "#theme";',
+      "/repo/src/app.css",
+      new Set(),
+      (name) => names.push(name),
+      "/repo/src/app.css",
+      (spec) => (spec === "#theme" ? "fixture-css-theme" : null),
+    );
+    expect(names).toEqual(["fixture-css-theme"]);
   });
 });
 

@@ -16,6 +16,7 @@ import {
   isVirtualModuleId,
   moduleFilePath,
   packageNameFromCssSpecifier,
+  packageNameFromHashImport,
   packageNameFromModuleId,
   packageNameFromSassSpecifier,
 } from "./dependencyClassification.ts";
@@ -145,8 +146,10 @@ let queue: Promise<unknown> = Promise.resolve();
  * same way: first-party specifiers are parsed from the stylesheet, and
  * nested package files come from `addWatchFile` during `vite:css` (one
  * wrap for the build; overlapping transforms share it, ALS attributes).
- * First-party files Vite resolved (aliases, `#imports`) are walked the
- * same as a relative `@import`; we do not implement the resolver.
+ * First-party files Vite resolved (aliases, `#imports` to local files)
+ * are walked the same as a relative `@import`; we do not implement the
+ * resolver. A `#imports` specifier that maps to a package is read from
+ * this project's package.json `imports` field.
  *
  * `directPackages` walks importers of those same modules so a first-party
  * import (source under `root`) is distinct from a transitive that only
@@ -187,6 +190,11 @@ async function collectOnce({
   };
   let watchFileIntercept: WatchFileIntercept | null = null;
   const cssAtImportSeen = new Set<string>();
+  const packageImports = readPackageJsonImports(resolvedRoot);
+
+  function hashPackageName(spec: string): string | null {
+    return packageNameFromHashImport(spec, packageImports);
+  }
 
   function targetForCurrentStylesheet(): {
     names: Set<string>;
@@ -250,7 +258,14 @@ async function collectOnce({
     } catch {
       return;
     }
-    walkCssAtImports(code, filePath, cssAtImportSeen, recordInlinedPackage);
+    walkCssAtImports(
+      code,
+      filePath,
+      cssAtImportSeen,
+      recordInlinedPackage,
+      filePath,
+      hashPackageName,
+    );
   }
 
   function recordCssAtImportsFromSource(code: string, id: string): void {
@@ -263,6 +278,7 @@ async function collectOnce({
       cssAtImportSeen,
       recordInlinedPackage,
       id,
+      hashPackageName,
     );
   }
 
@@ -399,6 +415,7 @@ export function walkCssAtImports(
   seen: Set<string>,
   record: (name: string, containingFile: string) => void,
   seenKey: string = containingFile,
+  hashPackageName: (spec: string) => string | null = () => null,
 ): void {
   if (seen.has(seenKey)) {
     return;
@@ -418,11 +435,18 @@ export function walkCssAtImports(
         } catch {
           continue;
         }
-        walkCssAtImports(nextCode, resolved, seen, record);
+        walkCssAtImports(
+          nextCode,
+          resolved,
+          seen,
+          record,
+          resolved,
+          hashPackageName,
+        );
         continue;
       }
     }
-    const name = packageNameFromCssSpecifier(spec);
+    const name = packageNameFromCssSpecifier(spec) ?? hashPackageName(spec);
     if (name !== null) {
       record(name, containingFile);
     }
@@ -446,6 +470,19 @@ function resolveRelativeCss(fromFile: string, spec: string): string | null {
     }
   }
   return null;
+}
+
+function readPackageJsonImports(
+  root: string,
+): Record<string, unknown> | undefined {
+  try {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(root, "package.json"), "utf8"),
+    ) as { imports?: Record<string, unknown> };
+    return pkg.imports;
+  } catch {
+    return undefined;
+  }
 }
 
 function prependSassImporter(
