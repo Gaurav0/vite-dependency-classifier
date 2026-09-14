@@ -118,7 +118,7 @@ runtime in a user's browser.
 Everything else is a **`devDependency`**: build tooling, linters, test
 runners, type packages, and anything eliminated from the production bundle.
 
-### Four cases that are not obvious
+### Five cases that are not obvious
 
 **A package can be a runtime dependency without being imported by name.** Peer
 dependencies pulled in at runtime by a dependency's own code still belong in
@@ -134,6 +134,11 @@ on the vendor to render nothing in production. A package that ships a no-op
 in production builds is still a package the bundler had to resolve; the
 guard is what makes the `devDependency` classification true rather than
 merely harmless.
+
+**A package imported only as CSS still ships.** Vite extracts stylesheets
+into assets and drops the JS placeholders those imports used, so the
+package never appears in a remaining JavaScript chunk. It is still in the
+production output and belongs in `dependencies`.
 
 **A type-only import is not a runtime dependency.** `import type ...` is
 erased at build time and contributes nothing to the bundle, so a package used
@@ -205,7 +210,7 @@ npm run format:check
 npm run build
 ```
 
-Fixture projects import `fixture-lib` and `fixture-leaf` from
-`test/fixtures/packages`, installed at the repo root as `file:`
+Fixture projects import `fixture-lib`, `fixture-leaf`, and `fixture-css`
+from `test/fixtures/packages`, installed at the repo root as `file:`
 devDependencies. Vite's walk-up resolution then yields real
 `/node_modules/<name>/` module ids.

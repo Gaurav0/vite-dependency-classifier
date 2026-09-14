@@ -1,0 +1,8 @@
+{
+  "name": "fixture-guarded-css-import",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "fixture-css": "*"
+  }
+}

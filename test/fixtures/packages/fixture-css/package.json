@@ -1,0 +1,10 @@
+{
+  "name": "fixture-css",
+  "private": true,
+  "type": "module",
+  "sideEffects": ["*.css"],
+  "exports": {
+    ".": "./index.css",
+    "./index.css": "./index.css"
+  }
+}
