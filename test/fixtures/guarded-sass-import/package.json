@@ -1,0 +1,8 @@
+{
+  "name": "fixture-guarded-sass-import",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "fixture-sass": "*"
+  }
+}

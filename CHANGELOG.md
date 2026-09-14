@@ -32,6 +32,10 @@ and this project adheres to
   `renderChunk` (before Vite deletes pure-CSS chunks), so it is not
   reported as `extra` when declared as a `dependency`, and is reported
   as `missing` when declared as a `devDependency`.
+- Sass `@use` / `@forward` of a package is no longer treated as absent
+  from the production bundle. The preprocessor inlines those files, so
+  they never appear as Vite module ids; they are now collected from a
+  Sass importer during the production compile.
 
 ## [0.1.1] - 2026-09-13
 

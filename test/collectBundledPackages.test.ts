@@ -10,8 +10,9 @@ import {
  * Real production builds against ./fixtures. We need the bundler for this —
  * tree-shaking, async chunks — so stubbing inputs would miss the bugs.
  *
- * Fixtures import fixture-lib / fixture-leaf / fixture-css / fixture-cjs via
- * `file:` at the repo root so Vite resolves them as `/node_modules/<name>/`.
+ * Fixtures import fixture-lib / fixture-leaf / fixture-css / fixture-sass /
+ * fixture-cjs via `file:` at the repo root so Vite resolves them as
+ * `/node_modules/<name>/`.
  * Nested store layouts are covered in dependencyClassification.test.ts.
  */
 function fixture(name: string) {
@@ -241,6 +242,75 @@ describe("fixture classification", () => {
         devDependencies: ["fixture-css"],
       }),
     ).toEqual({ missing: ["fixture-css"], extra: [] });
+  });
+
+  it("collects a package imported only via Sass @use", async () => {
+    const { packages: bundled, directPackages } =
+      await collect("sass-only-import");
+
+    expect(bundled.has("fixture-sass")).toBe(true);
+    expect(directPackages.has("fixture-sass")).toBe(true);
+
+    expect(
+      classifyPackages({
+        bundled,
+        dependencies: ["fixture-sass"],
+        devDependencies: [],
+      }),
+    ).toEqual({ missing: [], extra: [] });
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: ["fixture-sass"],
+        devDependencies: [],
+      }),
+    ).toEqual([]);
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: [],
+        devDependencies: [],
+      }),
+    ).toEqual(["fixture-sass"]);
+  });
+
+  it("reports a Sass-only package declared as a devDependency", async () => {
+    const { packages: bundled } = await collect("sass-only-import");
+
+    expect(
+      classifyPackages({
+        bundled,
+        dependencies: [],
+        devDependencies: ["fixture-sass"],
+      }),
+    ).toEqual({ missing: ["fixture-sass"], extra: [] });
+  });
+
+  it("reports nothing for a Sass import behind an import.meta.env.DEV guard", async () => {
+    const { packages: bundled, directPackages } = await collect(
+      "guarded-sass-import",
+    );
+
+    expect(bundled.has("fixture-sass")).toBe(false);
+    expect(directPackages.has("fixture-sass")).toBe(false);
+
+    expect(
+      classifyPackages({
+        bundled,
+        dependencies: [],
+        devDependencies: ["fixture-sass"],
+      }),
+    ).toEqual({ missing: [], extra: [] });
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: [],
+        devDependencies: [],
+      }),
+    ).toEqual([]);
   });
 
   it("reports nothing for a CSS import behind an import.meta.env.DEV guard", async () => {

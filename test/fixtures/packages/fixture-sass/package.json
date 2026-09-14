@@ -1,0 +1,7 @@
+{
+  "name": "fixture-sass",
+  "private": true,
+  "type": "module",
+  "sass": "_index.scss",
+  "style": "_index.scss"
+}

@@ -74,8 +74,34 @@ export function packageNameFromModuleId(id: string): string | null {
   }
 
   const segments = id.slice(lastIndex + NODE_MODULES.length).split("/");
-  const [first, second] = segments;
+  return packageNameFromSegments(segments[0], segments[1]);
+}
 
+/**
+ * Package name from a Sass `@use` / `@forward` / `@import` specifier.
+ *
+ * Sass inlines those files; they never become Vite module ids. Relative
+ * paths, absolute paths, and `sass:` builtins are not packages. `pkg:`
+ * is the Node package importer.
+ */
+export function packageNameFromSassSpecifier(url: string): string | null {
+  if (url.startsWith("sass:") || url.startsWith(".") || url.startsWith("/")) {
+    return null;
+  }
+
+  const spec = url.startsWith("pkg:") ? url.slice("pkg:".length) : url;
+  if (spec.includes(":")) {
+    return null;
+  }
+
+  const segments = spec.split("/");
+  return packageNameFromSegments(segments[0], segments[1]);
+}
+
+function packageNameFromSegments(
+  first: string | undefined,
+  second: string | undefined,
+): string | null {
   if (!first) {
     return null;
   }
