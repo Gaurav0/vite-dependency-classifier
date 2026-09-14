@@ -116,6 +116,7 @@ describe("bin", () => {
     const result = spawnCli("--help");
     expect(result.status).toBe(0);
     expect(result.stdout).toBe(`${helpText()}\n`);
+    expect(helpText()).toMatch(/undeclared production/i);
   });
 
   it("prints the package version and exits 0", () => {
@@ -176,6 +177,17 @@ describe("bin", () => {
       "Dependency classification is correct.",
     );
   });
+
+  it("exits 1 when a first-party import is unlisted", () => {
+    const root = fileURLToPath(
+      new URL("./fixtures/unlisted-import", import.meta.url),
+    );
+
+    const result = spawnCli(root, "--input", "src/main.ts");
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("fixture-lib");
+    expect(result.stderr).toMatch(/imported by production source/i);
+  });
 });
 
 describe("formatCheckResult", () => {
@@ -218,5 +230,56 @@ describe("formatCheckResult", () => {
     expect(stderr).toMatch(/reason next to the flag/i);
     expect(stderr).toMatch(/do not change the declaration/i);
     expect(stderr).not.toContain("transitiveDevs");
+  });
+
+  const unlistedResult: CheckResult = {
+    ok: false,
+    missing: [],
+    extra: [],
+    unlisted: ["fixture-lib"],
+    packages: new Set(["fixture-lib", "fixture-leaf"]),
+    chunkCount: 1,
+  };
+
+  it("names unlisted packages and says they belong in dependencies", () => {
+    const { stdout, stderr } = formatCheckResult(unlistedResult, {
+      json: false,
+      quiet: false,
+    });
+    expect(stderr).toContain("fixture-lib");
+    expect(stderr).toMatch(/imported by production source/i);
+    expect(stderr).toMatch(/peerDependencies/);
+    expect(stderr).toMatch(/optionalDependencies/);
+    expect(stderr).toMatch(/belong in dependencies/i);
+    expect(stderr).not.toMatch(/--\w/);
+    expect(stderr).not.toContain("directPackages");
+    expect(stdout).not.toContain("Dependency classification is correct.");
+  });
+
+  it("includes unlisted in JSON and omits the full direct set", () => {
+    const { stdout, stderr } = formatCheckResult(unlistedResult, {
+      json: true,
+      quiet: false,
+    });
+    expect(stderr).toBe("");
+    expect(JSON.parse(stdout)).toEqual({
+      ok: false,
+      missing: [],
+      extra: [],
+      unlisted: ["fixture-lib"],
+      packages: ["fixture-leaf", "fixture-lib"],
+      chunkCount: 1,
+    });
+    expect(stdout).not.toContain("directPackages");
+  });
+
+  it("prints unlisted failures on stderr when quiet", () => {
+    const { stdout, stderr } = formatCheckResult(unlistedResult, {
+      json: false,
+      quiet: true,
+    });
+    expect(stdout).toBe("");
+    expect(stderr).toContain("fixture-lib");
+    expect(stderr.startsWith("\n")).toBe(false);
   });
 });

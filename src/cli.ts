@@ -38,7 +38,8 @@ export function helpText(): string {
 Usage: ${CLI_NAME} [options] [root]
 
 Check that a Vite project's dependencies/devDependencies split matches
-what the production build actually contains.
+what the production build actually contains. Undeclared production
+imports also fail.
 
 Arguments:
   root                   Project root (default: current directory)
@@ -146,6 +147,7 @@ export function formatCheckResult(
         ok: result.ok,
         missing: result.missing,
         extra: result.extra,
+        unlisted: result.unlisted,
         packages: [...result.packages].sort(),
         chunkCount: result.chunkCount,
       }),
@@ -188,6 +190,15 @@ export function formatCheckResult(
         "`--runtime-peer <name>`. Put the reason next to the flag in the\n" +
         "script or CI step that runs this command.",
     );
+  }
+
+  if (result.unlisted.length > 0) {
+    stderr.push(
+      "\nImported by production source, but listed in none of dependencies,\n" +
+        "devDependencies, peerDependencies, or optionalDependencies:",
+    );
+    for (const name of result.unlisted) stderr.push(`  ${name}`);
+    stderr.push("\nThese ship to users, so they belong in dependencies.");
   }
 
   if (!result.ok) {
