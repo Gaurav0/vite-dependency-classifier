@@ -365,6 +365,18 @@ describe("fixture classification", () => {
     ).toEqual([]);
   });
 
+  it("does not treat a bare relative CSS @import as a package", async () => {
+    const { packages: bundled, directPackages } =
+      await collect("css-at-import");
+
+    expect(directPackages.has("local.css")).toBe(false);
+    expect(directPackages.has("local")).toBe(false);
+    expect(directPackages.has("components")).toBe(false);
+    expect(bundled.has("local.css")).toBe(false);
+    expect(bundled.has("components")).toBe(false);
+    expect(directPackages.has("fixture-css-theme")).toBe(true);
+  });
+
   it("treats a nested CSS @import as bundled, not first-party", async () => {
     const { packages: bundled, directPackages } =
       await collect("css-at-import");

@@ -242,25 +242,26 @@ async function collectOnce({
     seen.add(containingFile);
 
     for (const spec of cssImportSpecifiers(code)) {
+      // CSS @import is URL resolution (Vite preferRelative): "file.css"
+      // and "dir/file.css" are local files, not npm names. Try the
+      // filesystem first; only a miss is a package specifier.
+      if (isCssRelativeUrl(spec)) {
+        const resolved = resolveRelativeCss(containingFile, spec);
+        if (resolved !== null) {
+          let nextCode: string;
+          try {
+            nextCode = fs.readFileSync(resolved, "utf8");
+          } catch {
+            continue;
+          }
+          walkCssAtImports(nextCode, resolved, seen);
+          continue;
+        }
+      }
       const name = packageNameFromCssSpecifier(spec);
       if (name !== null) {
         recordInlinedPackage(name, containingFile);
-        continue;
       }
-      if (!spec.startsWith(".")) {
-        continue;
-      }
-      const resolved = resolveRelativeCss(containingFile, spec);
-      if (resolved === null) {
-        continue;
-      }
-      let nextCode: string;
-      try {
-        nextCode = fs.readFileSync(resolved, "utf8");
-      } catch {
-        continue;
-      }
-      walkCssAtImports(nextCode, resolved, seen);
     }
   }
 
@@ -373,6 +374,11 @@ async function collectOnce({
 }
 
 const PREPROCESSOR_FILE = /\.(scss|sass|less|styl|stylus)$/i;
+
+/** Absolute `/…`, protocol-relative `//…`, and `http(s):` / `data:` are not files. */
+function isCssRelativeUrl(spec: string): boolean {
+  return !spec.startsWith("/") && !spec.includes(":");
+}
 
 function resolveRelativeCss(fromFile: string, spec: string): string | null {
   const resolved = path.resolve(path.dirname(fromFile), spec);
