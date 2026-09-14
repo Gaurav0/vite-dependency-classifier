@@ -38,8 +38,9 @@ export function helpText(): string {
 Usage: ${CLI_NAME} [options] [root]
 
 Check that a Vite project's dependencies/devDependencies split matches
-what the production build actually contains. Undeclared production
-imports also fail.
+what the production build actually contains. First-party production
+imports listed in none of dependencies, devDependencies,
+peerDependencies, or optionalDependencies fail as unlisted.
 
 Arguments:
   root                   Project root (default: current directory)
@@ -53,7 +54,8 @@ Options:
                          Exempt a transitive-only devDependency from the
                          missing check (repeatable). Put the reason next
                          to the flag.
-  --json                 Print the result as JSON
+  --json                 Print the result as JSON (ok, missing, extra,
+                         unlisted, packages, chunkCount)
   -q, --quiet            Print only classification failures
   -h, --help             Show this help
   -v, --version          Show version`;

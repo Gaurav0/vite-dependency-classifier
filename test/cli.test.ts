@@ -116,7 +116,7 @@ describe("bin", () => {
     const result = spawnCli("--help");
     expect(result.status).toBe(0);
     expect(result.stdout).toBe(`${helpText()}\n`);
-    expect(helpText()).toMatch(/undeclared production/i);
+    expect(helpText()).toMatch(/unlisted/);
   });
 
   it("prints the package version and exits 0", () => {
