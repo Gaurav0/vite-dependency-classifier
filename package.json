@@ -1,7 +1,7 @@
 {
   "name": "vite-dependency-classifier",
   "version": "0.2.0",
-  "description": "Check that a Vite project's dependencies/devDependencies split matches what the production build actually contains.",
+  "description": "Check that a Vite project's dependencies/devDependencies split matches what the production build actually contains, and that production source does not import an undeclared package.",
   "keywords": [
     "vite",
     "dependencies",

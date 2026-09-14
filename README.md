@@ -1,7 +1,8 @@
 # vite-dependency-classifier
 
 Check that a Vite project's `dependencies` / `devDependencies` split matches
-what the production build actually contains.
+what the production build actually contains, and that production source does
+not import an undeclared package.
 
 The classification is derived from a real production build, not from a source
 scan. That is the point: a source-level check cannot tell that a dev-only
@@ -37,14 +38,16 @@ npx vite-dependency-classifier --transitive-dev some-util
 - `--input <file>` — entry module, for projects without a Vite config
 - `--runtime-peer <name>` — exempt a runtime peer from the extra check (repeatable). Put the reason in a comment next to the flag in the script or CI step that passes it.
 - `--transitive-dev <name>` — exempt a transitive-only `devDependency` from the missing check (repeatable). Put the reason in a comment next to the flag in the script or CI step that passes it. Do not change the declaration.
-- `--json` — print the result as JSON
+- `--json` — print the result as JSON (`ok`, `missing`, `extra`, `unlisted`, `packages`, `chunkCount`)
 - `-q, --quiet` — print only classification failures
 
 The command reads that project's `package.json` and Vite config (the same
 names Vite searches: `vite.config.js`, `.mjs`, `.ts`, `.cjs`, `.mts`,
 `.cts`), runs a production build (nothing is written to disk), and exits
-`1` if a declared `devDependency` reached the bundle or a declared
-`dependency` did not. A usage error (unknown flag, extra argument) exits
+`1` if a declared `devDependency` reached the bundle, a declared
+`dependency` did not, or production source imported a package listed in
+none of `dependencies`, `devDependencies`, `peerDependencies`, or
+`optionalDependencies`. A usage error (unknown flag, extra argument) exits
 `2`.
 
 The published CLI is compiled JavaScript (`dist/check.js`). A clone can still
@@ -85,20 +88,21 @@ vite-dependency-classifier \
 ```ts
 import { check } from "vite-dependency-classifier";
 
-const { ok, missing, extra } = await check();
+const { ok, missing, extra, unlisted } = await check();
 ```
 
 ```js
 const { check } = require("vite-dependency-classifier");
 
-const { ok, missing, extra } = await check();
+const { ok, missing, extra, unlisted } = await check();
 ```
 
 Pass `runtimePeers` the same way the CLI takes `--runtime-peer`, and
 `transitiveDevs` the same way it takes `--transitive-dev`, with the
 reason on the line that adds each name.
 
-`collectBundledPackages` and `classifyPackages` are also exported for callers
+`collectBundledPackages` (the bundle set and `directPackages`),
+`classifyPackages`, and `classifyUnlisted` are also exported for callers
 that want the halves separately.
 
 The published tarball is compiled JavaScript (`dist/`), generated at pack
@@ -107,8 +111,9 @@ time. `dist/` is not committed. Installing from a GitHub source tree needs
 
 ## Dependencies
 
-`package.json` splits packages into `dependencies` and `devDependencies`. This
-package treats that split as follows.
+`package.json` splits packages into `dependencies` and `devDependencies`.
+`missing` and `extra` follow that split. `unlisted` also treats
+`peerDependencies` and `optionalDependencies` as declared.
 
 ### The definition
 
@@ -118,7 +123,12 @@ runtime in a user's browser.
 Everything else is a **`devDependency`**: build tooling, linters, test
 runners, type packages, and anything eliminated from the production bundle.
 
-### Five cases that are not obvious
+### Cases that are not obvious
+
+**A first-party production import listed in none of the four fields is
+`unlisted`.** It resolved because it was hoisted or walked up from another
+install. It shipped, so it belongs in `dependencies`. There is no exemption
+flag.
 
 **A package can be a runtime dependency without being imported by name.** Peer
 dependencies pulled in at runtime by a dependency's own code still belong in
@@ -126,31 +136,36 @@ dependencies pulled in at runtime by a dependency's own code still belong in
 case this check sees them without help. A package that is required at runtime
 and _never_ appears in the bundle under its own name needs an explicit
 exemption — `--runtime-peer` on the CLI, or `runtimePeers` on `check()` —
-with a stated reason next to that flag or call.
+with a stated reason next to that flag or call. A package listed only in
+`peerDependencies` and imported by first-party source is not `unlisted`.
 
 **A dev-only tool imported from a production source file must be behind an
 `import.meta.env.DEV` guard**, so the bundler removes it — rather than relying
 on the vendor to render nothing in production. A package that ships a no-op
 in production builds is still a package the bundler had to resolve; the
 guard is what makes the `devDependency` classification true rather than
-merely harmless.
+merely harmless. A DEV-only import listed nowhere is out of scope: it is
+not in the production graph, so it is not `unlisted`.
 
 **A package imported only as CSS still ships.** Vite extracts stylesheets
 into assets and drops the JS placeholders those imports used, so the
 package never appears in a remaining JavaScript chunk. It is still in the
-production output and belongs in `dependencies`.
+production output and belongs in `dependencies`. An undeclared CSS-only
+production import is `unlisted`, not silent.
 
 **A type-only import is not a runtime dependency.** `import type ...` is
 erased at build time and contributes nothing to the bundle, so a package used
-only that way belongs in `devDependencies`.
+only that way belongs in `devDependencies`. An undeclared type-only import is
+not `unlisted`. This check will not report it.
 
 **A correct `devDependency` can still appear in the bundle as a transitive of
 something that ships.** The app listed it for tests or tooling; a production
 library also depends on it. That is not a reason to move it to
-`dependencies`. The bundle cannot tell that overlap from a real unguarded
-import, so the exemption is explicit — `--transitive-dev` on the CLI, or
-`transitiveDevs` on `check()` — with a stated reason next to that flag or
-call. Do not change the declaration to silence the finding.
+`dependencies`, and it is not `unlisted` unless first-party source imported
+it. The bundle cannot tell that overlap from a real unguarded import, so the
+exemption is explicit — `--transitive-dev` on the CLI, or `transitiveDevs`
+on `check()` — with a stated reason next to that flag or call. Do not change
+the declaration to silence the finding.
 
 ### Why the split matters
 
@@ -163,13 +178,13 @@ exposure that command will not show you.
 This package _is_ the check. `missing` is a declared `devDependency` present
 in the production bundle, unless it is listed in `transitiveDevs` because
 that presence is only transitive. `extra` is a declared `dependency` absent
-from it.
+from it. `unlisted` is a first-party production import listed in none of
+`dependencies`, `devDependencies`, `peerDependencies`, or
+`optionalDependencies`.
 
 A bundled package is misclassified only when it is declared on the wrong
 side. Transitive packages that appear in the bundle and are declared nowhere
-are not reported — they are indistinguishable, at the bundle level, from a
-phantom dependency imported by source but listed in neither field. Catching
-phantoms needs a source-level import scan, which is a different check.
+are not reported unless first-party source imported them.
 
 ## Engines
 

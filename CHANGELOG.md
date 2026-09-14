@@ -8,6 +8,19 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-14
+
+### Added
+
+- `unlisted` finding: first-party production imports listed in none of
+  `dependencies`, `devDependencies`, `peerDependencies`, or
+  `optionalDependencies`. Fails `ok` and CLI exit `1`.
+- `collectBundledPackages` returns `directPackages`.
+- Exported `classifyUnlisted`.
+- `--json` includes `unlisted`.
+- `peerDependencies` and `optionalDependencies` count as declared for
+  `unlisted` only.
+
 ### Fixed
 
 - CSS-only imports are no longer treated as absent from the production
@@ -51,6 +64,7 @@ not treated as a runtime dependency.
 - CI on Node 22, 24, and 26. `npm publish` runs `prepublishOnly` (`npm test`)
   so a red tree cannot ship.
 
-[unreleased]: https://github.com/Gaurav0/vite-dependency-classifier/compare/v0.1.1...HEAD
+[unreleased]: https://github.com/Gaurav0/vite-dependency-classifier/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Gaurav0/vite-dependency-classifier/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/Gaurav0/vite-dependency-classifier/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Gaurav0/vite-dependency-classifier/releases/tag/v0.1.0
