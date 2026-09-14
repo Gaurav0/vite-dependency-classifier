@@ -296,19 +296,26 @@ async function collectOnce({
       prependSassImporter(config.css.preprocessorOptions, sassImporter);
     },
     configResolved(config) {
-      wrapCssTransformWithStylesheetContext(
-        config.plugins,
-        (id, run, host, code) =>
-          stylesheetCompile.run(moduleFilePath(id), () => {
-            recordCssAtImportsFromSource(code, id);
-            watchFileIntercept = ensureWatchFileIntercept(
-              host,
-              recordWatchFile,
-              watchFileIntercept,
-            );
-            return run();
-          }),
-      );
+      if (
+        !wrapCssTransformWithStylesheetContext(
+          config.plugins,
+          (id, run, host, code) =>
+            stylesheetCompile.run(moduleFilePath(id), () => {
+              recordCssAtImportsFromSource(code, id);
+              watchFileIntercept = ensureWatchFileIntercept(
+                host,
+                recordWatchFile,
+                watchFileIntercept,
+              );
+              return run();
+            }),
+        )
+      ) {
+        // Vite logLevel is silent; CSS @import has no Sass-style fallback.
+        console.warn(
+          "vite-dependency-classifier: vite:css transform was not wrapped; CSS @import packages will be treated as absent.",
+        );
+      }
     },
     renderChunk(_code, chunk) {
       // `chunk.modules` (not `moduleIds`): Vite keeps empty CSS
@@ -436,7 +443,7 @@ function prependSassImporter(
   }
 }
 
-function wrapCssTransformWithStylesheetContext(
+export function wrapCssTransformWithStylesheetContext(
   plugins: readonly Plugin[],
   runForId: (
     id: string,
@@ -444,7 +451,7 @@ function wrapCssTransformWithStylesheetContext(
     host: WatchFileHost,
     code: string,
   ) => unknown,
-): void {
+): boolean {
   for (const plugin of plugins) {
     if (plugin.name !== "vite:css") {
       continue;
@@ -470,7 +477,7 @@ function wrapCssTransformWithStylesheetContext(
           code,
         );
       } as NonNullable<Plugin["transform"]>;
-      return;
+      return true;
     }
     if (
       typeof transform === "object" &&
@@ -497,6 +504,8 @@ function wrapCssTransformWithStylesheetContext(
           code,
         );
       };
+      return true;
     }
   }
+  return false;
 }

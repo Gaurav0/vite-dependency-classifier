@@ -200,6 +200,20 @@ describe("cssImportSpecifiers", () => {
     ).toEqual(["https://example.com/x.css"]);
     expect(packageNameFromCssSpecifier("https://example.com/x.css")).toBeNull();
   });
+
+  it("ignores @import in a block comment", () => {
+    expect(
+      cssImportSpecifiers('/* @import "bootstrap"; */\n@import "pkg";'),
+    ).toEqual(["pkg"]);
+  });
+
+  it("ignores @import inside a quoted string", () => {
+    expect(
+      cssImportSpecifiers(
+        '.x{content:"@import \\"bootstrap\\"";}\n@import "pkg";',
+      ),
+    ).toEqual(["pkg"]);
+  });
 });
 
 describe("isVirtualModuleId", () => {

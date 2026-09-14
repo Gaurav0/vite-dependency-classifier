@@ -125,21 +125,64 @@ export function packageNameFromCssSpecifier(spec: string): string | null {
  * Specifiers from CSS `@import` rules, in source order.
  *
  * Handles `"pkg"`, `'pkg'`, `url("pkg")`, `url('pkg')`, `url(pkg)`,
- * and trailing `layer()` / media queries. Does not interpret the
- * specifier; `packageNameFromCssSpecifier` decides if it is a package.
+ * and trailing `layer()` / media queries. Skips block comments and
+ * quoted strings. Does not interpret the specifier;
+ * `packageNameFromCssSpecifier` decides if it is a package.
  */
 export function cssImportSpecifiers(code: string): string[] {
   const specifiers: string[] = [];
   const atImport =
     /@import\s+(?:url\(\s*)?(?:"([^"]*)"|'([^']*)'|([^"')\s;]+))\s*\)?/gi;
-  let match: RegExpExecArray | null;
-  while ((match = atImport.exec(code)) !== null) {
-    const spec = match[1] ?? match[2] ?? match[3];
-    if (spec !== undefined && spec !== "") {
-      specifiers.push(spec);
+  let i = 0;
+  while (i < code.length) {
+    if (code.startsWith("/*", i)) {
+      const end = code.indexOf("*/", i + 2);
+      i = end === -1 ? code.length : end + 2;
+      continue;
     }
+    const ch = code[i];
+    if (ch === '"' || ch === "'") {
+      i = skipCssString(code, i);
+      continue;
+    }
+    if (
+      (i === 0 || !isCssIdentContinue(code[i - 1])) &&
+      code.slice(i, i + 7).toLowerCase() === "@import"
+    ) {
+      atImport.lastIndex = i;
+      const match = atImport.exec(code);
+      if (match !== null && match.index === i) {
+        const spec = match[1] ?? match[2] ?? match[3];
+        if (spec !== undefined && spec !== "") {
+          specifiers.push(spec);
+        }
+        i = atImport.lastIndex;
+        continue;
+      }
+    }
+    i += 1;
   }
   return specifiers;
+}
+
+function skipCssString(code: string, start: number): number {
+  const quote = code[start];
+  let i = start + 1;
+  while (i < code.length) {
+    if (code[i] === "\\") {
+      i += 2;
+      continue;
+    }
+    if (code[i] === quote) {
+      return i + 1;
+    }
+    i += 1;
+  }
+  return code.length;
+}
+
+function isCssIdentContinue(ch: string | undefined): boolean {
+  return ch !== undefined && /[A-Za-z0-9_-]/.test(ch);
 }
 
 function unwrapCssImportSpecifier(spec: string): string {

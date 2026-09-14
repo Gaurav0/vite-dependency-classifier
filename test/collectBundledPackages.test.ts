@@ -1,6 +1,9 @@
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { collectBundledPackages } from "../src/collectBundledPackages.ts";
+import {
+  collectBundledPackages,
+  wrapCssTransformWithStylesheetContext,
+} from "../src/collectBundledPackages.ts";
 import {
   classifyPackages,
   classifyUnlisted,
@@ -622,5 +625,42 @@ describe("fixture classification", () => {
         devDependencies: [],
       }),
     ).toEqual([]);
+  });
+});
+
+describe("wrapCssTransformWithStylesheetContext", () => {
+  const runForId = (): undefined => undefined;
+
+  it("returns false when vite:css is missing", () => {
+    expect(wrapCssTransformWithStylesheetContext([], runForId)).toBe(false);
+    expect(
+      wrapCssTransformWithStylesheetContext(
+        [{ name: "other", transform: (): undefined => undefined }],
+        runForId,
+      ),
+    ).toBe(false);
+  });
+
+  it("returns true for a function transform", () => {
+    expect(
+      wrapCssTransformWithStylesheetContext(
+        [{ name: "vite:css", transform: (): undefined => undefined }],
+        runForId,
+      ),
+    ).toBe(true);
+  });
+
+  it("returns true for an object handler transform", () => {
+    expect(
+      wrapCssTransformWithStylesheetContext(
+        [
+          {
+            name: "vite:css",
+            transform: { handler: (): undefined => undefined },
+          },
+        ],
+        runForId,
+      ),
+    ).toBe(true);
   });
 });

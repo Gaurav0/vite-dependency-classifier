@@ -57,6 +57,7 @@ describe("check", () => {
     expect(result.extra).toEqual([]);
     expect(result.unlisted).toEqual([]);
     expect(result.packages.has("fixture-css-theme")).toBe(true);
+    expect(result.packages.has("fixture-css")).toBe(true);
   });
 
   it("exempts a transitive-only devDependency passed as transitiveDevs", async () => {
