@@ -108,4 +108,14 @@ describe("check", () => {
     expect(result.ok).toBe(true);
     expect(result.unlisted).toEqual([]);
   });
+
+  it("does not report deps of source aliased from outside the project root", async () => {
+    const result = await check({
+      root: fixture("aliased-workspace"),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.unlisted).toEqual([]);
+    expect(result.packages.has("fixture-leaf")).toBe(true);
+  });
 });

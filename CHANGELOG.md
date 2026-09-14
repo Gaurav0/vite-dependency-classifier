@@ -14,7 +14,10 @@ and this project adheres to
 
 - `unlisted` finding: first-party production imports listed in none of
   `dependencies`, `devDependencies`, `peerDependencies`, or
-  `optionalDependencies`. Fails `ok` and CLI exit `1`.
+  `optionalDependencies`. Fails `ok` and CLI exit `1`. First-party is
+  source under the project root; Vite aliases to another package's
+  source are not. Virtual wrappers (`\0…`, `virtual:`) and same-package
+  proxies (CommonJS) are hops, not first-party.
 - `collectBundledPackages` returns `directPackages`.
 - Exported `classifyUnlisted`.
 - `--json` includes `unlisted`.

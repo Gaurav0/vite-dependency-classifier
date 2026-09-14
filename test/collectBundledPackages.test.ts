@@ -406,4 +406,21 @@ describe("fixture classification", () => {
       }),
     ).toEqual(["fixture-lib"]);
   });
+
+  it("does not treat an aliased workspace package's deps as first-party", async () => {
+    const { packages: bundled, directPackages } = await collectBundledPackages({
+      root: fixture("aliased-workspace"),
+    });
+
+    expect(bundled.has("fixture-leaf")).toBe(true);
+    expect(directPackages.has("fixture-leaf")).toBe(false);
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: [],
+        devDependencies: [],
+      }),
+    ).toEqual([]);
+  });
 });

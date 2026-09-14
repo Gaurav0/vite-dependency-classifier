@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   classifyPackages,
   classifyUnlisted,
+  isFirstPartySourceId,
+  isVirtualModuleId,
+  moduleFilePath,
   packageNameFromModuleId,
 } from "../src/dependencyClassification.ts";
 
@@ -66,6 +69,66 @@ describe("packageNameFromModuleId", () => {
 
   it("returns null for a virtual module with no path separators", () => {
     expect(packageNameFromModuleId("\0commonjsHelpers.js")).toBeNull();
+  });
+
+  it("returns null for an unresolved virtual: id", () => {
+    expect(packageNameFromModuleId("virtual:my-plugin")).toBeNull();
+  });
+});
+
+describe("isVirtualModuleId", () => {
+  it("treats a NUL prefix and virtual: as virtual", () => {
+    expect(isVirtualModuleId("\0vite/preload-helper")).toBe(true);
+    expect(isVirtualModuleId("virtual:my-plugin")).toBe(true);
+    expect(isVirtualModuleId("/repo/src/main.ts")).toBe(false);
+  });
+});
+
+describe("moduleFilePath", () => {
+  it("strips a query string", () => {
+    expect(moduleFilePath("/repo/src/App.vue?vue&type=script")).toBe(
+      "/repo/src/App.vue",
+    );
+  });
+});
+
+describe("isFirstPartySourceId", () => {
+  const root = "/repo";
+
+  it("accepts source under the project root", () => {
+    expect(isFirstPartySourceId("/repo/src/main.ts", root)).toBe(true);
+  });
+
+  it("accepts a query suffix on first-party source", () => {
+    expect(
+      isFirstPartySourceId("/repo/src/App.vue?vue&type=script", root),
+    ).toBe(true);
+  });
+
+  it("rejects a package under node_modules", () => {
+    expect(
+      isFirstPartySourceId("/repo/node_modules/react/index.js", root),
+    ).toBe(false);
+  });
+
+  it("rejects a store path that is not a package name", () => {
+    expect(
+      isFirstPartySourceId(
+        "/repo/node_modules/.store/react@19.2.5/index.js",
+        root,
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects source outside the project root", () => {
+    expect(
+      isFirstPartySourceId("/repo-ui/packages/ui/src/index.ts", root),
+    ).toBe(false);
+  });
+
+  it("rejects virtual modules", () => {
+    expect(isFirstPartySourceId("\0vite/preload-helper", root)).toBe(false);
+    expect(isFirstPartySourceId("virtual:my-plugin", root)).toBe(false);
   });
 });
 

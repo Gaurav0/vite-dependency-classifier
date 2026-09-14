@@ -126,9 +126,17 @@ runners, type packages, and anything eliminated from the production bundle.
 ### Cases that are not obvious
 
 **A first-party production import listed in none of the four fields is
-`unlisted`.** It resolved because it was hoisted or walked up from another
-install. It shipped, so it belongs in `dependencies`. There is no exemption
-flag.
+`unlisted`.** First-party means source under this project's root, after
+hopping Vite virtuals (`\0…`, `virtual:`) and same-package wrappers
+(CommonJS proxies). It resolved because it was hoisted or walked up from
+another install. It shipped, so it belongs in `dependencies`. There is
+no exemption flag.
+
+**A Vite alias that points at another package's source is not first-party.**
+Those files sit outside this project's root, so their imports are treated
+like another package's: they are not `unlisted` here. Install the workspace
+package through `node_modules` (`workspace:*`, `file:`) and run this check
+on that package if you want its own `package.json` classified.
 
 **A package can be a runtime dependency without being imported by name.** Peer
 dependencies pulled in at runtime by a dependency's own code still belong in
@@ -180,11 +188,9 @@ in the production bundle, unless it is listed in `transitiveDevs` because
 that presence is only transitive. `extra` is a declared `dependency` absent
 from it. `unlisted` is a first-party production import listed in none of
 `dependencies`, `devDependencies`, `peerDependencies`, or
-`optionalDependencies`.
-
-A bundled package is misclassified only when it is declared on the wrong
-side. Transitive packages that appear in the bundle and are declared nowhere
-are not reported unless first-party source imported them.
+`optionalDependencies`. First-party means source under this project's
+root. Transitive packages that appear in the bundle and are declared
+nowhere are not reported unless that source imported them.
 
 ## Engines
 

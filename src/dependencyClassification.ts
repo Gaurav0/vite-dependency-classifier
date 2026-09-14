@@ -5,7 +5,54 @@
  * See README.md ("Dependencies") for the policy.
  */
 
+import path from "node:path";
+
 const NODE_MODULES = "/node_modules/";
+
+/**
+ * Rollup/Vite virtual: NUL prefix, or the unresolved `virtual:` form some
+ * plugins leave on importers.
+ */
+export function isVirtualModuleId(id: string): boolean {
+  return id.startsWith("\0") || id.startsWith("virtual:");
+}
+
+/** Path part of a module id, without `?query`. */
+export function moduleFilePath(id: string): string {
+  const query = id.indexOf("?");
+  return query === -1 ? id : id.slice(0, query);
+}
+
+function isInsideDir(filePath: string, root: string): boolean {
+  const resolvedRoot = path.resolve(root);
+  const resolvedFile = path.resolve(root, filePath);
+  const relative = path.relative(resolvedRoot, resolvedFile);
+  return (
+    relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative)
+  );
+}
+
+/**
+ * True when `id` is this project's source: under `root`, not a package,
+ * not a virtual, not a node_modules store path.
+ *
+ * A Vite alias to another package's files lives outside `root`, so it is
+ * not first-party here. That package's dependencies are not `unlisted` in
+ * this project.
+ */
+export function isFirstPartySourceId(id: string, root: string): boolean {
+  if (isVirtualModuleId(id)) {
+    return false;
+  }
+  if (packageNameFromModuleId(id) !== null) {
+    return false;
+  }
+  const filePath = moduleFilePath(id);
+  if (filePath.includes(NODE_MODULES)) {
+    return false;
+  }
+  return isInsideDir(filePath, root);
+}
 
 /**
  * Package name from a Rollup/Rolldown module id, or null for first-party
@@ -17,7 +64,7 @@ const NODE_MODULES = "/node_modules/";
 export function packageNameFromModuleId(id: string): string | null {
   // Virtual modules get a NUL prefix from Rollup. Some (\0commonjsHelpers.js)
   // have no slashes, so catch them before the path walk.
-  if (id.startsWith("\0")) {
+  if (isVirtualModuleId(id)) {
     return null;
   }
 
