@@ -7,9 +7,9 @@ import { classifyPackages } from "../src/dependencyClassification.ts";
  * Real production builds against ./fixtures. We need the bundler for this —
  * tree-shaking, async chunks — so stubbing inputs would miss the bugs.
  *
- * Fixtures import fixture-lib / fixture-leaf via `file:` at the repo root so
- * Vite resolves them as `/node_modules/<name>/`. Nested store layouts are
- * covered in dependencyClassification.test.ts.
+ * Fixtures import fixture-lib / fixture-leaf / fixture-css via `file:` at the
+ * repo root so Vite resolves them as `/node_modules/<name>/`. Nested store
+ * layouts are covered in dependencyClassification.test.ts.
  */
 function fixture(name: string) {
   return fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url));
@@ -141,6 +141,48 @@ describe("fixture classification", () => {
         bundled,
         dependencies: [],
         devDependencies: ["fixture-lib"],
+      }),
+    ).toEqual({ missing: [], extra: [] });
+  });
+
+  it("collects a package imported only as CSS", async () => {
+    const { packages: bundled } = await collect("css-only-import");
+
+    expect(bundled.has("fixture-css")).toBe(true);
+
+    expect(
+      classifyPackages({
+        bundled,
+        dependencies: ["fixture-css"],
+        devDependencies: [],
+      }),
+    ).toEqual({ missing: [], extra: [] });
+  });
+
+  it("reports a CSS-only package declared as a devDependency", async () => {
+    const { packages: bundled } = await collect("css-only-import");
+
+    expect(
+      classifyPackages({
+        bundled,
+        dependencies: [],
+        devDependencies: ["fixture-css"],
+      }),
+    ).toEqual({ missing: ["fixture-css"], extra: [] });
+  });
+
+  it("reports nothing for a CSS import behind an import.meta.env.DEV guard", async () => {
+    const { packages: bundled } = await collect("guarded-css-import");
+
+    // Check the bundle, not just the findings — a collector using
+    // moduleParsed would still see this package after tree-shaking.
+    expect(bundled.has("fixture-css")).toBe(false);
+
+    expect(
+      classifyPackages({
+        bundled,
+        dependencies: [],
+        devDependencies: ["fixture-css"],
       }),
     ).toEqual({ missing: [], extra: [] });
   });

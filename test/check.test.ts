@@ -19,6 +19,18 @@ describe("check", () => {
     expect(result.packages.has("fixture-lib")).toBe(true);
   });
 
+  it("reports ok for a CSS-only declared dependency", async () => {
+    const result = await check({
+      root: fixture("css-only-import"),
+      configFile: false,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.missing).toEqual([]);
+    expect(result.extra).toEqual([]);
+    expect(result.packages.has("fixture-css")).toBe(true);
+  });
+
   it("exempts a transitive-only devDependency passed as transitiveDevs", async () => {
     const root = fixture("transitive-dev");
 

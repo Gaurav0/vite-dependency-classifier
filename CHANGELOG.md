@@ -8,6 +8,14 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- CSS-only imports are no longer treated as absent from the production
+  bundle. A package imported only as a stylesheet is now collected from
+  `renderChunk` (before Vite deletes pure-CSS chunks), so it is not
+  reported as `extra` when declared as a `dependency`, and is reported
+  as `missing` when declared as a `devDependency`.
+
 ## [0.1.1] - 2026-09-13
 
 ### Added

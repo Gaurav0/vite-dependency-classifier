@@ -35,9 +35,12 @@ let queue: Promise<unknown> = Promise.resolve();
 /**
  * Build `root` for production and return the packages that landed in the output.
  *
- * Uses `generateBundle`, not `moduleParsed` — the latter fires before
+ * Uses `renderChunk`, not `moduleParsed` — the latter fires before
  * tree-shaking, so a guarded DEV import would still count. Walks every
  * chunk, not just entries: a dynamic import lives in an async chunk.
+ * CSS-only packages live in `chunk.modules` here; Vite's css-post then
+ * extracts them to assets and deletes pure-CSS chunks, so
+ * `generateBundle` never sees them.
  */
 export function collectBundledPackages(
   options: CollectBundledPackagesOptions,
@@ -62,14 +65,17 @@ async function collectOnce({
 
   const collect: Plugin = {
     name: "collect-bundled-packages",
+    renderChunk(_code, chunk) {
+      // `chunk.modules` (not `moduleIds`): Vite keeps empty CSS
+      // placeholders here via `moduleSideEffects: 'no-treeshake'`.
+      for (const id of Object.keys(chunk.modules)) {
+        const name = packageNameFromModuleId(id);
+        if (name) packages.add(name);
+      }
+    },
     generateBundle(_options, bundle) {
       for (const output of Object.values(bundle)) {
-        if (output.type !== "chunk") continue;
-        chunkCount++;
-        for (const id of Object.keys(output.modules)) {
-          const name = packageNameFromModuleId(id);
-          if (name) packages.add(name);
-        }
+        if (output.type === "chunk") chunkCount++;
       }
     },
   };
