@@ -10,9 +10,9 @@ import {
  * Real production builds against ./fixtures. We need the bundler for this —
  * tree-shaking, async chunks — so stubbing inputs would miss the bugs.
  *
- * Fixtures import fixture-lib / fixture-leaf / fixture-css / fixture-sass /
- * fixture-cjs via `file:` at the repo root so Vite resolves them as
- * `/node_modules/<name>/`.
+ * Fixtures import fixture-lib / fixture-leaf / fixture-css /
+ * fixture-css-theme / fixture-sass / fixture-cjs via `file:` at the repo
+ * root so Vite resolves them as `/node_modules/<name>/`.
  * Nested store layouts are covered in dependencyClassification.test.ts.
  */
 function fixture(name: string) {
@@ -327,6 +327,107 @@ describe("fixture classification", () => {
         bundled,
         dependencies: [],
         devDependencies: ["fixture-css"],
+      }),
+    ).toEqual({ missing: [], extra: [] });
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: [],
+        devDependencies: [],
+      }),
+    ).toEqual([]);
+  });
+
+  it("collects a package imported only via CSS @import", async () => {
+    const { packages: bundled, directPackages } =
+      await collect("css-at-import");
+
+    expect(bundled.has("fixture-css-theme")).toBe(true);
+    expect(bundled.has("fixture-css")).toBe(true);
+    expect(directPackages.has("fixture-css-theme")).toBe(true);
+    expect(directPackages.has("fixture-css")).toBe(false);
+
+    expect(
+      classifyPackages({
+        bundled,
+        dependencies: ["fixture-css-theme"],
+        devDependencies: [],
+      }),
+    ).toEqual({ missing: [], extra: [] });
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: ["fixture-css-theme"],
+        devDependencies: [],
+      }),
+    ).toEqual([]);
+  });
+
+  it("treats a nested CSS @import as bundled, not first-party", async () => {
+    const { packages: bundled, directPackages } =
+      await collect("css-at-import");
+
+    expect(bundled.has("fixture-css")).toBe(true);
+    expect(directPackages.has("fixture-css")).toBe(false);
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: [],
+        devDependencies: [],
+      }),
+    ).toEqual(["fixture-css-theme"]);
+
+    expect(
+      classifyPackages({
+        bundled,
+        dependencies: ["fixture-css-theme", "fixture-css"],
+        devDependencies: [],
+      }),
+    ).toEqual({ missing: [], extra: [] });
+  });
+
+  it("reports a CSS @import package declared as a devDependency", async () => {
+    const { packages: bundled } = await collect("css-at-import");
+
+    expect(
+      classifyPackages({
+        bundled,
+        dependencies: [],
+        devDependencies: ["fixture-css-theme"],
+      }),
+    ).toEqual({ missing: ["fixture-css-theme"], extra: [] });
+  });
+
+  it("treats an undeclared first-party CSS @import as unlisted", async () => {
+    const { directPackages } = await collect("css-at-import");
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: [],
+        devDependencies: [],
+      }),
+    ).toEqual(["fixture-css-theme"]);
+  });
+
+  it("reports nothing for a CSS @import behind an import.meta.env.DEV guard", async () => {
+    const { packages: bundled, directPackages } = await collect(
+      "guarded-css-at-import",
+    );
+
+    expect(bundled.has("fixture-css-theme")).toBe(false);
+    expect(bundled.has("fixture-css")).toBe(false);
+    expect(directPackages.has("fixture-css-theme")).toBe(false);
+    expect(directPackages.has("fixture-css")).toBe(false);
+
+    expect(
+      classifyPackages({
+        bundled,
+        dependencies: [],
+        devDependencies: ["fixture-css-theme"],
       }),
     ).toEqual({ missing: [], extra: [] });
 

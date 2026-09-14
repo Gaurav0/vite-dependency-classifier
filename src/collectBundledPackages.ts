@@ -5,13 +5,16 @@
  * guard actually drops the import. See README.md ("Dependencies").
  */
 import { AsyncLocalStorage } from "node:async_hooks";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build, type Plugin } from "vite";
 import {
+  cssImportSpecifiers,
   isFirstPartySourceId,
   isVirtualModuleId,
   moduleFilePath,
+  packageNameFromCssSpecifier,
   packageNameFromModuleId,
   packageNameFromSassSpecifier,
 } from "./dependencyClassification.ts";
@@ -131,7 +134,9 @@ let queue: Promise<unknown> = Promise.resolve();
  * extracts them to assets and deletes pure-CSS chunks, so
  * `generateBundle` never sees them. Sass `@use` / `@forward` of a
  * package is inlined by the preprocessor, so those names come from a
- * Sass importer instead.
+ * Sass importer instead. CSS `@import` of a package is inlined the
+ * same way: first-party specifiers are parsed from the stylesheet, and
+ * nested package files come from `addWatchFile` during `vite:css`.
  *
  * `directPackages` walks importers of those same modules so a first-party
  * import (source under `root`) is distinct from a transitive that only
@@ -162,34 +167,100 @@ async function collectOnce({
   let chunkCount = 0;
 
   const stylesheetCompile = new AsyncLocalStorage<string>();
-  const sassByStylesheet = new Map<
+  const inlinedByStylesheet = new Map<
     string,
     { names: Set<string>; direct: Set<string> }
   >();
-  const sassFallback = { names: new Set<string>(), direct: new Set<string>() };
+  const inlinedFallback = {
+    names: new Set<string>(),
+    direct: new Set<string>(),
+  };
 
-  function recordSassPackage(url: string, containingFile: string | null): void {
-    const name = packageNameFromSassSpecifier(url);
-    if (name === null) {
-      return;
-    }
+  function targetForCurrentStylesheet(): {
+    names: Set<string>;
+    direct: Set<string>;
+  } {
     const stylesheet = stylesheetCompile.getStore();
-    let target = sassFallback;
-    if (stylesheet !== undefined) {
-      const existing = sassByStylesheet.get(stylesheet);
-      if (existing === undefined) {
-        target = { names: new Set(), direct: new Set() };
-        sassByStylesheet.set(stylesheet, target);
-      } else {
-        target = existing;
-      }
+    if (stylesheet === undefined) {
+      return inlinedFallback;
     }
+    const existing = inlinedByStylesheet.get(stylesheet);
+    if (existing !== undefined) {
+      return existing;
+    }
+    const created = { names: new Set<string>(), direct: new Set<string>() };
+    inlinedByStylesheet.set(stylesheet, created);
+    return created;
+  }
+
+  function recordInlinedPackage(
+    name: string,
+    containingFile: string | null,
+  ): void {
+    const target = targetForCurrentStylesheet();
     target.names.add(name);
     if (
       containingFile !== null &&
       isFirstPartySourceId(containingFile, resolvedRoot)
     ) {
       target.direct.add(name);
+    }
+  }
+
+  function recordSassPackage(url: string, containingFile: string | null): void {
+    const name = packageNameFromSassSpecifier(url);
+    if (name === null) {
+      return;
+    }
+    recordInlinedPackage(name, containingFile);
+  }
+
+  function recordWatchFile(file: string): void {
+    const name = packageNameFromModuleId(file);
+    if (name === null) {
+      return;
+    }
+    targetForCurrentStylesheet().names.add(name);
+  }
+
+  function recordCssAtImportsFromSource(code: string, id: string): void {
+    const filePath = moduleFilePath(id);
+    if (PREPROCESSOR_FILE.test(filePath)) {
+      return;
+    }
+    walkCssAtImports(code, filePath, new Set());
+  }
+
+  function walkCssAtImports(
+    code: string,
+    containingFile: string,
+    seen: Set<string>,
+  ): void {
+    if (seen.has(containingFile)) {
+      return;
+    }
+    seen.add(containingFile);
+
+    for (const spec of cssImportSpecifiers(code)) {
+      const name = packageNameFromCssSpecifier(spec);
+      if (name !== null) {
+        recordInlinedPackage(name, containingFile);
+        continue;
+      }
+      if (!spec.startsWith(".")) {
+        continue;
+      }
+      const resolved = resolveRelativeCss(containingFile, spec);
+      if (resolved === null) {
+        continue;
+      }
+      let nextCode: string;
+      try {
+        nextCode = fs.readFileSync(resolved, "utf8");
+      } catch {
+        continue;
+      }
+      walkCssAtImports(nextCode, resolved, seen);
     }
   }
 
@@ -216,18 +287,23 @@ async function collectOnce({
       prependSassImporter(config.css.preprocessorOptions, sassImporter);
     },
     configResolved(config) {
-      wrapCssTransformWithStylesheetContext(config.plugins, (id, run) =>
-        stylesheetCompile.run(moduleFilePath(id), run),
+      wrapCssTransformWithStylesheetContext(
+        config.plugins,
+        (id, run, host, code) =>
+          stylesheetCompile.run(moduleFilePath(id), () => {
+            recordCssAtImportsFromSource(code, id);
+            return interceptAddWatchFile(host, recordWatchFile, run);
+          }),
       );
     },
     renderChunk(_code, chunk) {
       // `chunk.modules` (not `moduleIds`): Vite keeps empty CSS
       // placeholders here via `moduleSideEffects: 'no-treeshake'`.
       for (const id of Object.keys(chunk.modules)) {
-        const sass = sassByStylesheet.get(moduleFilePath(id));
-        if (sass !== undefined) {
-          for (const name of sass.names) packages.add(name);
-          for (const name of sass.direct) directPackages.add(name);
+        const inlined = inlinedByStylesheet.get(moduleFilePath(id));
+        if (inlined !== undefined) {
+          for (const name of inlined.names) packages.add(name);
+          for (const name of inlined.direct) directPackages.add(name);
         }
 
         const name = packageNameFromModuleId(id);
@@ -254,9 +330,9 @@ async function collectOnce({
       }
       // vite:css transform was not wrapped; Sass loads still count as
       // bundled because the preprocessor ran during this production build.
-      if (sassByStylesheet.size === 0) {
-        for (const name of sassFallback.names) packages.add(name);
-        for (const name of sassFallback.direct) directPackages.add(name);
+      if (inlinedByStylesheet.size === 0) {
+        for (const name of inlinedFallback.names) packages.add(name);
+        for (const name of inlinedFallback.direct) directPackages.add(name);
       }
     },
   };
@@ -296,6 +372,71 @@ async function collectOnce({
   return { packages, directPackages, chunkCount };
 }
 
+const PREPROCESSOR_FILE = /\.(scss|sass|less|styl|stylus)$/i;
+
+function resolveRelativeCss(fromFile: string, spec: string): string | null {
+  const resolved = path.resolve(path.dirname(fromFile), spec);
+  if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
+    return resolved;
+  }
+  if (path.extname(resolved) === "") {
+    const withCss = `${resolved}.css`;
+    if (fs.existsSync(withCss) && fs.statSync(withCss).isFile()) {
+      return withCss;
+    }
+  }
+  return null;
+}
+
+interface WatchFileHost {
+  addWatchFile: (id: string) => void;
+}
+
+function interceptAddWatchFile<T>(
+  host: WatchFileHost,
+  record: (file: string) => void,
+  run: () => T,
+): T {
+  const originalAddWatchFile = host.addWatchFile;
+  if (typeof originalAddWatchFile !== "function") {
+    return run();
+  }
+  const wrapped = (file: string): void => {
+    record(file);
+    originalAddWatchFile.call(host, file);
+  };
+  try {
+    host.addWatchFile = wrapped;
+  } catch {
+    return run();
+  }
+  const restore = (): void => {
+    if (host.addWatchFile === wrapped) {
+      host.addWatchFile = originalAddWatchFile;
+    }
+  };
+  try {
+    const result = run();
+    if (isThenable(result)) {
+      return Promise.resolve(result).finally(restore) as T;
+    }
+    restore();
+    return result;
+  } catch (error) {
+    restore();
+    throw error;
+  }
+}
+
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "then" in value &&
+    typeof value.then === "function"
+  );
+}
+
 function prependSassImporter(
   preprocessorOptions: Record<string, unknown>,
   importer: object,
@@ -326,7 +467,12 @@ function prependSassImporter(
 
 function wrapCssTransformWithStylesheetContext(
   plugins: readonly Plugin[],
-  runForId: (id: string, run: () => unknown) => unknown,
+  runForId: (
+    id: string,
+    run: () => unknown,
+    host: WatchFileHost,
+    code: string,
+  ) => unknown,
 ): void {
   for (const plugin of plugins) {
     if (plugin.name !== "vite:css") {
@@ -335,18 +481,23 @@ function wrapCssTransformWithStylesheetContext(
     const transform: unknown = plugin.transform;
     if (typeof transform === "function") {
       const original = transform as (
-        this: unknown,
+        this: WatchFileHost,
         code: string,
         id: string,
         options?: unknown,
       ) => unknown;
       plugin.transform = function wrappedCssTransform(
-        this: unknown,
+        this: WatchFileHost,
         code: string,
         id: string,
         options?: unknown,
       ) {
-        return runForId(id, () => original.call(this, code, id, options));
+        return runForId(
+          id,
+          () => original.call(this, code, id, options),
+          this,
+          code,
+        );
       } as NonNullable<Plugin["transform"]>;
       return;
     }
@@ -357,18 +508,23 @@ function wrapCssTransformWithStylesheetContext(
       typeof transform.handler === "function"
     ) {
       const original = transform.handler as (
-        this: unknown,
+        this: WatchFileHost,
         code: string,
         id: string,
         options?: unknown,
       ) => unknown;
       transform.handler = function wrappedCssTransform(
-        this: unknown,
+        this: WatchFileHost,
         code: string,
         id: string,
         options?: unknown,
       ) {
-        return runForId(id, () => original.call(this, code, id, options));
+        return runForId(
+          id,
+          () => original.call(this, code, id, options),
+          this,
+          code,
+        );
       };
     }
   }
