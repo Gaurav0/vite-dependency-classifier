@@ -258,7 +258,7 @@ describe("classifyUnlisted", () => {
     devDependencies: [],
   };
 
-  it("reports a direct import listed in none of the four fields", () => {
+  it("reports a direct import listed in none of the declared fields", () => {
     expect(
       classifyUnlisted({
         ...base,

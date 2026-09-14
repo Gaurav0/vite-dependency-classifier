@@ -66,7 +66,7 @@ describe("check", () => {
     expect(result.packages.has("fixture-lib")).toBe(true);
   });
 
-  it("reports a first-party import listed in none of the four fields", async () => {
+  it("reports a first-party import listed in none of the app fields", async () => {
     const result = await check({
       root: fixture("unlisted-import"),
       configFile: false,
@@ -122,7 +122,7 @@ describe("check", () => {
     expect(result.unlisted).toEqual([]);
   });
 
-  it("reports a first-party CommonJS import listed in none of the four fields", async () => {
+  it("reports a first-party CommonJS import listed in none of the app fields", async () => {
     const result = await check({
       root: fixture("cjs-unlisted-import"),
       configFile: false,
