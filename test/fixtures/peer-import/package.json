@@ -1,0 +1,8 @@
+{
+  "name": "fixture-peer-import",
+  "private": true,
+  "type": "module",
+  "peerDependencies": {
+    "fixture-lib": "*"
+  }
+}

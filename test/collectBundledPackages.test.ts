@@ -381,4 +381,29 @@ describe("fixture classification", () => {
       }),
     ).toEqual([]);
   });
+
+  it("treats a first-party import with no declaration as unlisted", async () => {
+    const { packages: bundled, directPackages } =
+      await collect("unlisted-import");
+
+    expect(directPackages.has("fixture-lib")).toBe(true);
+    expect(directPackages.has("fixture-leaf")).toBe(false);
+    expect(bundled.has("fixture-leaf")).toBe(true);
+
+    expect(
+      classifyPackages({
+        bundled,
+        dependencies: [],
+        devDependencies: [],
+      }),
+    ).toEqual({ missing: [], extra: [] });
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: [],
+        devDependencies: [],
+      }),
+    ).toEqual(["fixture-lib"]);
+  });
 });
