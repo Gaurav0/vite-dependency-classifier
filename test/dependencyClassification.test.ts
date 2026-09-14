@@ -74,6 +74,14 @@ describe("packageNameFromModuleId", () => {
   it("returns null for an unresolved virtual: id", () => {
     expect(packageNameFromModuleId("virtual:my-plugin")).toBeNull();
   });
+
+  it("reads a package name from a CommonJS proxy query", () => {
+    expect(
+      packageNameFromModuleId(
+        "/repo/node_modules/fixture-cjs/index.js?commonjs-proxy",
+      ),
+    ).toBe("fixture-cjs");
+  });
 });
 
 describe("isVirtualModuleId", () => {

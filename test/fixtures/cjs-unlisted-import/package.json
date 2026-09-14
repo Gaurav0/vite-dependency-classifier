@@ -1,0 +1,5 @@
+{
+  "name": "fixture-cjs-unlisted-import",
+  "private": true,
+  "type": "module"
+}

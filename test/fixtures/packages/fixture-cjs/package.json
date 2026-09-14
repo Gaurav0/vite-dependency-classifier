@@ -1,0 +1,6 @@
+{
+  "name": "fixture-cjs",
+  "private": true,
+  "sideEffects": true,
+  "main": "./index.js"
+}

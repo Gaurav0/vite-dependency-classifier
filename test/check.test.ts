@@ -109,6 +109,16 @@ describe("check", () => {
     expect(result.unlisted).toEqual([]);
   });
 
+  it("reports a first-party CommonJS import listed in none of the four fields", async () => {
+    const result = await check({
+      root: fixture("cjs-unlisted-import"),
+      configFile: false,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.unlisted).toEqual(["fixture-cjs"]);
+  });
+
   it("does not report deps of source aliased from outside the project root", async () => {
     const result = await check({
       root: fixture("aliased-workspace"),

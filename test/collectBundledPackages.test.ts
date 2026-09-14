@@ -10,9 +10,9 @@ import {
  * Real production builds against ./fixtures. We need the bundler for this —
  * tree-shaking, async chunks — so stubbing inputs would miss the bugs.
  *
- * Fixtures import fixture-lib / fixture-leaf / fixture-css via `file:` at the
- * repo root so Vite resolves them as `/node_modules/<name>/`. Nested store
- * layouts are covered in dependencyClassification.test.ts.
+ * Fixtures import fixture-lib / fixture-leaf / fixture-css / fixture-cjs via
+ * `file:` at the repo root so Vite resolves them as `/node_modules/<name>/`.
+ * Nested store layouts are covered in dependencyClassification.test.ts.
  */
 function fixture(name: string) {
   return fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url));
@@ -405,6 +405,23 @@ describe("fixture classification", () => {
         devDependencies: [],
       }),
     ).toEqual(["fixture-lib"]);
+  });
+
+  it("treats a first-party CommonJS import with no declaration as unlisted", async () => {
+    const { packages: bundled, directPackages } = await collect(
+      "cjs-unlisted-import",
+    );
+
+    expect(bundled.has("fixture-cjs")).toBe(true);
+    expect(directPackages.has("fixture-cjs")).toBe(true);
+
+    expect(
+      classifyUnlisted({
+        direct: directPackages,
+        dependencies: [],
+        devDependencies: [],
+      }),
+    ).toEqual(["fixture-cjs"]);
   });
 
   it("does not treat an aliased workspace package's deps as first-party", async () => {

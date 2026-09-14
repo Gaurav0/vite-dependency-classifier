@@ -231,7 +231,7 @@ npm run format:check
 npm run build
 ```
 
-Fixture projects import `fixture-lib`, `fixture-leaf`, and `fixture-css`
-from `test/fixtures/packages`, installed at the repo root as `file:`
-devDependencies. Vite's walk-up resolution then yields real
+Fixture projects import `fixture-lib`, `fixture-leaf`, `fixture-css`, and
+`fixture-cjs` from `test/fixtures/packages`, installed at the repo root as
+`file:` devDependencies. Vite's walk-up resolution then yields real
 `/node_modules/<name>/` module ids.
