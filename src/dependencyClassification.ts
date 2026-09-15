@@ -209,6 +209,67 @@ export function cssImportSpecifiers(code: string): string[] {
   return specifiers;
 }
 
+/**
+ * Specifiers from Less `@import` rules, in source order.
+ *
+ * Same quoted / `url()` forms as CSS. Skips `//` line comments and a
+ * parenthesized option list (`(reference)`) so that list is not the
+ * specifier. `@plugin` is not `@import`. Does not interpret the
+ * specifier; `packageNameFromCssSpecifier` decides if it is a package.
+ */
+export function lessImportSpecifiers(code: string): string[] {
+  const specifiers: string[] = [];
+  let i = 0;
+  while (i < code.length) {
+    if (code.startsWith("/*", i)) {
+      const end = code.indexOf("*/", i + 2);
+      i = end === -1 ? code.length : end + 2;
+      continue;
+    }
+    if (code.startsWith("//", i)) {
+      const nl = code.indexOf("\n", i + 2);
+      i = nl === -1 ? code.length : nl + 1;
+      continue;
+    }
+    const ch = code[i];
+    if (ch === '"' || ch === "'") {
+      i = skipCssString(code, i);
+      continue;
+    }
+    if (
+      (i === 0 || !isCssIdentContinue(code[i - 1])) &&
+      code.slice(i, i + 7).toLowerCase() === "@import"
+    ) {
+      let pos = skipLessWhitespaceAndComments(code, i + 7);
+      if (code[pos] === "(") {
+        const close = code.indexOf(")", pos + 1);
+        pos =
+          close === -1
+            ? code.length
+            : skipLessWhitespaceAndComments(code, close + 1);
+      }
+      const parsed = readCssImportSpecifier(code, pos);
+      if (parsed !== null && parsed.spec !== "") {
+        specifiers.push(parsed.spec);
+        i = parsed.end;
+        continue;
+      }
+    }
+    i += 1;
+  }
+  return specifiers;
+}
+
+function skipLessWhitespaceAndComments(code: string, start: number): number {
+  let i = skipCssWhitespaceAndComments(code, start);
+  while (code.startsWith("//", i)) {
+    const nl = code.indexOf("\n", i + 2);
+    i = nl === -1 ? code.length : nl + 1;
+    i = skipCssWhitespaceAndComments(code, i);
+  }
+  return i;
+}
+
 function skipCssWhitespaceAndComments(code: string, start: number): number {
   let i = start;
   while (i < code.length) {

@@ -1,0 +1,7 @@
+{
+  "name": "fixture-less",
+  "private": true,
+  "type": "module",
+  "less": "index.less",
+  "style": "index.less"
+}

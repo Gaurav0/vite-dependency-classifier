@@ -192,6 +192,13 @@ The preprocessor inlines those files, so they never become Vite module
 ids. They are still in the compiled CSS and belong in `dependencies`.
 An undeclared Sass-only production import is `unlisted`, not silent.
 
+**A package pulled in only through Less `@import` still ships.**
+The preprocessor inlines those files, so they never become Vite module
+ids. They are still in the compiled CSS and belong in `dependencies`.
+An undeclared Less-only production import is `unlisted`, not silent.
+Nested `@import`s inside that package ship too, but they are not
+`unlisted` unless first-party source wrote them.
+
 **A type-only import is not a runtime dependency.** `import type ...` is
 erased at build time and contributes nothing to the bundle, so a package used
 only that way belongs in `devDependencies`. An undeclared type-only import is
@@ -264,10 +271,10 @@ npm run build
 ```
 
 Fixture projects import `fixture-lib`, `fixture-leaf`, `fixture-css`,
-`fixture-css-theme`, `fixture-sass`, and `fixture-cjs` from
-`test/fixtures/packages`, installed at the repo root as `file:`
-devDependencies. Vite's walk-up resolution then yields real
-`/node_modules/<name>/` module ids.
+`fixture-css-theme`, `fixture-sass`, `fixture-less`, `fixture-less-leaf`,
+and `fixture-cjs` from `test/fixtures/packages`, installed at the repo
+root as `file:` devDependencies. Vite's walk-up resolution then yields
+real `/node_modules/<name>/` module ids.
 
 CI (`npm ci`) runs format, lint, typecheck, build, and tests against the
 lockfile. A second job deletes `package-lock.json` and runs `npm install`

@@ -14,6 +14,7 @@ import {
   isFirstPartySourceId,
   isPreprocessorCssId,
   isVirtualModuleId,
+  lessImportSpecifiers,
   moduleFilePath,
   packageNameFromCssSpecifier,
   packageNameFromHashImport,
@@ -146,6 +147,9 @@ let queue: Promise<unknown> = Promise.resolve();
  * same way: first-party specifiers are parsed from the stylesheet, and
  * nested package files come from `addWatchFile` during `vite:css` (one
  * wrap for the build; overlapping transforms share it, ALS attributes).
+ * Less `@import` of a package is inlined too: first-party specifiers
+ * are parsed from standalone `.less` source; nested package files still
+ * come from `addWatchFile`.
  * First-party files Vite resolved (aliases, `#imports` to local files)
  * are walked the same as a relative `@import`; we do not implement the
  * resolver. A `#imports` specifier that maps to a package is read from
@@ -269,6 +273,16 @@ async function collectOnce({
   }
 
   function recordCssAtImportsFromSource(code: string, id: string): void {
+    if (isStandaloneLessId(id)) {
+      const containingFile = moduleFilePath(id);
+      for (const spec of lessImportSpecifiers(code)) {
+        const name = packageNameFromCssSpecifier(spec);
+        if (name !== null) {
+          recordInlinedPackage(name, containingFile);
+        }
+      }
+      return;
+    }
     if (isPreprocessorCssId(id)) {
       return;
     }
@@ -470,6 +484,10 @@ function resolveRelativeCss(fromFile: string, spec: string): string | null {
     }
   }
   return null;
+}
+
+function isStandaloneLessId(id: string): boolean {
+  return /\.less$/i.test(moduleFilePath(id));
 }
 
 function readPackageJsonImports(

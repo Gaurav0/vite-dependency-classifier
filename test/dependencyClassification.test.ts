@@ -3,6 +3,7 @@ import {
   classifyPackages,
   classifyUnlisted,
   cssImportSpecifiers,
+  lessImportSpecifiers,
   isFirstPartySourceId,
   isPreprocessorCssId,
   isVirtualModuleId,
@@ -254,6 +255,52 @@ describe("cssImportSpecifiers", () => {
     expect(cssImportSpecifiers("@import url(/* x */ 'pkg' /* y */);")).toEqual([
       "pkg",
     ]);
+  });
+});
+
+describe("lessImportSpecifiers", () => {
+  it("reads a double-quoted @import", () => {
+    expect(lessImportSpecifiers('@import "pkg";')).toEqual(["pkg"]);
+  });
+
+  it("reads a single-quoted @import", () => {
+    expect(lessImportSpecifiers("@import 'pkg';")).toEqual(["pkg"]);
+  });
+
+  it("reads a url() @import", () => {
+    expect(lessImportSpecifiers('@import url("pkg");')).toEqual(["pkg"]);
+  });
+
+  it("returns two @imports in source order", () => {
+    expect(lessImportSpecifiers('@import "first";\n@import "second";')).toEqual(
+      ["first", "second"],
+    );
+  });
+
+  it("ignores @import in a line comment", () => {
+    expect(lessImportSpecifiers('// @import "pkg";\n@import "other";')).toEqual(
+      ["other"],
+    );
+  });
+
+  it("ignores @import in a block comment", () => {
+    expect(
+      lessImportSpecifiers('/* @import "bootstrap"; */\n@import "pkg";'),
+    ).toEqual(["pkg"]);
+  });
+
+  it("skips a parenthesized option list so it is not the specifier", () => {
+    expect(lessImportSpecifiers('@import (reference) "pkg";')).toEqual(["pkg"]);
+  });
+
+  it("ignores @plugin", () => {
+    expect(lessImportSpecifiers('@plugin "pkg";')).toEqual([]);
+  });
+
+  it("yields a relative path so the name helper can reject it", () => {
+    expect(lessImportSpecifiers('@import "./x";')).toEqual(["./x"]);
+    expect(packageNameFromCssSpecifier("./x")).toBeNull();
+    expect(packageNameFromCssSpecifier("pkg")).toBe("pkg");
   });
 });
 
