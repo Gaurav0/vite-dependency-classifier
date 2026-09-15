@@ -8,6 +8,12 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- Load `vite` from the project being checked, not from this package. A
+  one-shot `npx` uses that project's Vite 8 (and fails if it is missing
+  or not `^8`), instead of a copy installed next to the classifier.
+
 ## [0.2.0] - 2026-09-14
 
 ### Added

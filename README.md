@@ -15,7 +15,9 @@ the policy requires.
 npm install --save-dev vite-dependency-classifier
 ```
 
-`vite` `^8` is a peer dependency and must already be present.
+`vite` `^8` is a peer dependency and must already be present. The check
+loads that project's `vite`, not one installed next to this package, so
+`npx vite-dependency-classifier` still builds with the app's copy.
 
 ## CLI
 

@@ -8,7 +8,8 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { build, type Plugin } from "vite";
+import type { Plugin } from "vite";
+import { importViteFromProject } from "./importVite.ts";
 import {
   cssImportSpecifiers,
   isFirstPartySourceId,
@@ -181,6 +182,7 @@ async function collectOnce({
   const directPackages = new Set<string>();
   const firstPartyCache = new Map<string, boolean>();
   const resolvedRoot = path.resolve(root);
+  const { build } = await importViteFromProject(resolvedRoot);
   let chunkCount = 0;
 
   const stylesheetCompile = new AsyncLocalStorage<string>();
